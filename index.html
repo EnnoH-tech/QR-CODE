@@ -1,53 +1,24 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  </head>
 
-<html>
+  <body style="margin:0; overflow:hidden; background:black;">
+    <a-scene embedded arjs="sourceType: webcam; trackingMethod: best;">
+     
+      <a-entity
+        gltf-model="url(Untitled.glb)"
+        position="0 0 -1.7"
+        scale="2.5 2.5 2.5"
+        animation="property: position; dir: alternate; dur: 9500; easing: easeInOutSine; loop: true; to: 0 0.06 -1.7"
+        animation__rot="property: rotation; dir: alternate; dur: 18000; easing: easeInOutSine; loop: true; to: 0 10 0">
+      </a-entity>
 
-<head>
-
-  <meta charset="utf-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
-
-</head>
-
-
-
-<body style="margin:0; overflow:hidden; background:black;">
-
-  <a-scene
-
-    embedded
-
-    arjs="sourceType: webcam; trackingMethod: best;"
-
-    renderer="colorManagement: true">
-
-
-
-    <a-entity
-
-      gltf-model="url(Untitled.glb)”
-
-      position="0 0 -2"
-
-      scale="1 1 1"
-
-      animation="property: position; dir: alternate; dur: 7000;
-
-                 easing: easeInOutSine; loop: true; to: 0 0.08 -2">
-
-    </a-entity>
-
-<a-box position="0 0 -1" depth="0.2" height="0.2" width="0.2"></a-box>
-
-    <a-light type="ambient" intensity="1"></a-light>
-
-  </a-scene>
-
-</body>
-
+      <a-light type="ambient" intensity="1"></a-light>
+    </a-scene>
+  </body>
 </html>
