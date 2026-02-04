@@ -1,45 +1,53 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
+
 <html>
+
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2487.7">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 13.0px 'Helvetica Neue'; color: #000000}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 13.0px 'Helvetica Neue'; color: #1f6bc0}
-    p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; font: 13.0px 'Helvetica Neue'; color: #000000; min-height: 15.0px}
-    span.s1 {color: #000000}
-  </style>
+
+  <meta charset="utf-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+
 </head>
-<body>
-<p class="p1">&lt;!DOCTYPE html&gt;</p>
-<p class="p1">&lt;html&gt;</p>
-<p class="p1">&lt;head&gt;</p>
-<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="utf-8"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;</p>
-<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span>&lt;script src="</span>https://aframe.io/releases/1.4.2/aframe.min.js<span class="s1">"&gt;&lt;/script&gt;</span></p>
-<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span>&lt;script src="</span>https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js<span class="s1">"&gt;&lt;/script&gt;</span></p>
-<p class="p1">&lt;/head&gt;</p>
-<p class="p3"><br></p>
-<p class="p1">&lt;body style="margin:0; overflow:hidden; background:black;"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">  </span>&lt;a-scene</p>
-<p class="p1"><span class="Apple-converted-space">    </span>embedded</p>
-<p class="p1"><span class="Apple-converted-space">    </span>arjs="sourceType: webcam; trackingMethod: best;"</p>
-<p class="p1"><span class="Apple-converted-space">    </span>renderer="colorManagement: true"&gt;</p>
-<p class="p3"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;a-entity</p>
-<p class="p1"><span class="Apple-converted-space">      </span>gltf-model="url(Un)”</p>
-<p class="p1"><span class="Apple-converted-space">      </span>position="0 0 -2"</p>
-<p class="p1"><span class="Apple-converted-space">      </span>scale="1 1 1"</p>
-<p class="p1"><span class="Apple-converted-space">      </span>animation="property: position; dir: alternate; dur: 7000;</p>
-<p class="p1"><span class="Apple-converted-space">                 </span>easing: easeInOutSine; loop: true; to: 0 0.08 -2"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/a-entity&gt;</p>
-<p class="p3"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;a-light type="ambient" intensity="1"&gt;&lt;/a-light&gt;</p>
-<p class="p1"><span class="Apple-converted-space">  </span>&lt;/a-scene&gt;</p>
-<p class="p1">&lt;/body&gt;</p>
-<p class="p1">&lt;/html&gt;</p>
+
+
+
+<body style="margin:0; overflow:hidden; background:black;">
+
+  <a-scene
+
+    embedded
+
+    arjs="sourceType: webcam; trackingMethod: best;"
+
+    renderer="colorManagement: true">
+
+
+
+    <a-entity
+
+      gltf-model="url(Un)”
+
+      position="0 0 -2"
+
+      scale="1 1 1"
+
+      animation="property: position; dir: alternate; dur: 7000;
+
+                 easing: easeInOutSine; loop: true; to: 0 0.08 -2">
+
+    </a-entity>
+
+
+
+    <a-light type="ambient" intensity="1"></a-light>
+
+  </a-scene>
+
 </body>
+
 </html>
