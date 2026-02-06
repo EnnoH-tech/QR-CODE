@@ -3,12 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR – Pattern Marker Debug (Hard)</title>
+    <title>AR – Pattern Marker + Model (iPhone Fix)</title>
 
+    <!-- A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- AR.js (A-Frame build) -->
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 
     <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
       #hud {
         position: fixed;
         top: 10px;
@@ -20,31 +23,154 @@
         border-radius: 6px;
         z-index: 9999;
         white-space: pre-line;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #tap {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(0,0,0,0.65);
+        color: #fff;
+        font: 16px/1.3 -apple-system, system-ui, sans-serif;
+        z-index: 9998;
+        text-align: center;
+        padding: 24px;
+      }
+      #tap.hidden { display: none; }
+      .btn {
+        margin-top: 12px;
+        display: inline-block;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.25);
       }
     </style>
+
+    <script>
+      // HUD + Status
+      AFRAME.registerComponent("status-hud", {
+        init: function () {
+          const hud = document.getElementById("hud");
+          const marker = this.el;
+
+          const setLines = (obj) => {
+            hud.textContent = [
+              `BOOT: ${obj.boot}`,
+              `SCENE: ${obj.scene}`,
+              `ARJS: ${obj.arjs}`,
+              `VIDEO: ${obj.video}`,
+              `MARKER: ${obj.marker}`,
+              `MODEL: ${obj.model}`
+            ].join("\n");
+          };
+
+          const state = {
+            boot: "starting…",
+            scene: "…",
+            arjs: "…",
+            video: "…",
+            marker: "waiting",
+            model: "waiting"
+          };
+
+          const sceneEl = document.querySelector("a-scene");
+          sceneEl.addEventListener("loaded", () => {
+            state.boot = "ok";
+            state.scene = "loaded";
+            state.arjs = (sceneEl.systems && sceneEl.systems["arjs"]) ? "present" : "missing";
+            setLines(state);
+          });
+
+          // Marker events
+          marker.addEventListener("markerFound", () => { state.marker = "FOUND"; setLines(state); });
+          marker.addEventListener("markerLost",  () => { state.marker = "LOST";  setLines(state); });
+
+          // Video presence polling (iOS)
+          const poll = () => {
+            const v = document.querySelector("video");
+            state.video = v ? "present" : "missing";
+            setLines(state);
+          };
+          setInterval(poll, 500);
+
+          // Model events
+          const modelEnt = document.getElementById("modelEnt");
+          modelEnt.addEventListener("model-loaded", () => { state.model = "LOADED"; setLines(state); });
+          modelEnt.addEventListener("model-error",  () => { state.model = "ERROR";  setLines(state); });
+
+          setLines(state);
+        }
+      });
+
+      // iOS "tap to start": plays inline video + kicks camera playback
+      async function startAR() {
+        const tap = document.getElementById("tap");
+        tap.classList.add("hidden");
+
+        // Wait a moment for AR.js to create the <video>
+        let tries = 0;
+        let video = null;
+
+        while (tries < 30) {
+          video = document.querySelector("video");
+          if (video) break;
+          await new Promise(r => setTimeout(r, 100));
+          tries++;
+        }
+
+        if (video) {
+          // iOS inline flags
+          video.setAttribute("playsinline", "");
+          video.setAttribute("webkit-playsinline", "");
+          video.muted = true; // iOS often requires muted autoplay for programmatic play
+
+          try { await video.play(); } catch (e) { /* ignore */ }
+        }
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("tapBtn").addEventListener("click", startAR);
+      });
+    </script>
   </head>
 
-  <body style="margin:0; overflow:hidden; background:black;">
+  <body>
     <div id="hud">BOOT: …</div>
 
+    <div id="tap">
+      <div>
+        <div>Tippe einmal, um die Kamera zu starten.</div>
+        <div class="btn" id="tapBtn">Start AR</div>
+      </div>
+    </div>
+
     <a-scene
-      id="scene"
       embedded
       vr-mode-ui="enabled:false"
       renderer="colorManagement:true"
-      arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;"
+      arjs="
+        sourceType: webcam;
+        videoTexture: true;
+        trackingMethod: best;
+        debugUIEnabled: true;
+      "
     >
       <a-assets>
         <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <a-marker id="m" type="pattern" url="./patternbw.patt">
+      <a-marker id="m" status-hud type="pattern" url="./patternbw.patt">
+        <!-- Licht -->
         <a-entity light="type: ambient; intensity: 1.6"></a-entity>
         <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-        <!-- Muss sichtbar sein sobald Marker FOUND -->
+        <!-- Debug: muss erscheinen, wenn MARKER FOUND -->
         <a-box position="0 0.25 0" depth="0.3" height="0.3" width="0.3"></a-box>
 
+        <!-- Modell: startet direkt auf dem Marker -->
         <a-entity
           id="modelEnt"
           gltf-model="#model"
@@ -54,83 +180,12 @@
         ></a-entity>
       </a-marker>
 
-      <a-entity camera></a-entity>
+      <!-- Kamera (iOS-friendly) -->
+      <a-entity
+        camera
+        look-controls="enabled:false"
+        wasd-controls="enabled:false"
+      ></a-entity>
     </a-scene>
-
-    <script>
-      const hud = document.getElementById("hud");
-      const scene = document.getElementById("scene");
-      const marker = document.getElementById("m");
-      const modelEnt = document.getElementById("modelEnt");
-
-      const set = (lines) => (hud.textContent = lines.join("\n"));
-
-      set([
-        "BOOT: starting…",
-        "SCENE: …",
-        "ARJS: …",
-        "MARKER: …",
-        "MODEL: …",
-      ]);
-
-      // Szene geladen?
-      scene.addEventListener("loaded", () => {
-        set([
-          "BOOT: ok",
-          "SCENE: loaded",
-          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
-          "MARKER: waiting",
-          "MODEL: waiting",
-        ]);
-      });
-
-      // Marker Events
-      marker.addEventListener("markerFound", () => {
-        set([
-          "BOOT: ok",
-          "SCENE: loaded",
-          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
-          "MARKER: FOUND",
-          "MODEL: (see status)",
-        ]);
-      });
-
-      marker.addEventListener("markerLost", () => {
-        set([
-          "BOOT: ok",
-          "SCENE: loaded",
-          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
-          "MARKER: LOST",
-          "MODEL: (loaded?)",
-        ]);
-      });
-
-      // Modell Events
-      modelEnt.addEventListener("model-loaded", () => {
-        const lines = hud.textContent.split("\n");
-        lines[4] = "MODEL: LOADED";
-        hud.textContent = lines.join("\n");
-      });
-
-      modelEnt.addEventListener("model-error", () => {
-        const lines = hud.textContent.split("\n");
-        lines[4] = "MODEL: ERROR";
-        hud.textContent = lines.join("\n");
-      });
-
-      // Falls gar nichts feuert, nach 3s einen Status-Snapshot
-      setTimeout(() => {
-        const arjsPresent = !!(scene.systems && scene.systems["arjs"]);
-        const hasVideo = !!document.querySelector("video");
-
-        set([
-          "BOOT: ok (timeout snapshot)",
-          "SCENE: " + (scene.hasLoaded ? "loaded" : "not loaded"),
-          "ARJS: " + (arjsPresent ? "present" : "missing"),
-          "VIDEO: " + (hasVideo ? "present" : "missing"),
-          "MARKER: no events yet",
-        ]);
-      }, 3000);
-    </script>
   </body>
 </html>
