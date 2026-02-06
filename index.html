@@ -3,30 +3,66 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR Test – Hiro + enno6_test.glb</title>
+    <title>AR Debug – Hiro + enno6_test</title>
 
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+
+    <style>
+      #hud{
+        position:fixed; left:10px; top:10px;
+        background:rgba(0,0,0,0.6);
+        color:#fff; padding:8px 10px;
+        font:14px/1.2 -apple-system, system-ui, sans-serif;
+        z-index:9999; border-radius:6px;
+      }
+    </style>
+
+    <script>
+      AFRAME.registerComponent('model-status', {
+        init: function () {
+          const hud = document.getElementById('hud');
+          const set = (t) => hud.textContent = t;
+
+          set('MODEL: LOADING…');
+
+          this.el.addEventListener('model-loaded', () => {
+            set('MODEL: LOADED');
+          });
+
+          this.el.addEventListener('model-error', (e) => {
+            console.log('model-error', e);
+            set('MODEL: ERROR (GLB lädt nicht oder ist inkompatibel)');
+          });
+        }
+      });
+    </script>
   </head>
 
   <body style="margin:0; overflow:hidden; background:black;">
+    <div id="hud">MODEL: …</div>
+
     <a-scene
       embedded
       vr-mode-ui="enabled:false"
       renderer="colorManagement: true"
       arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
 
+      <a-assets>
+        <a-asset-item id="m" src="./enno6_test.glb"></a-asset-item>
+      </a-assets>
+
       <a-marker preset="hiro">
-        <!-- Licht -->
         <a-entity light="type: ambient; intensity: 2"></a-entity>
         <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-        <!-- Referenz: kleine rote Box -->
+        <!-- rote Referenzbox -->
         <a-box color="red" position="0 0.05 0" depth="0.1" height="0.1" width="0.1"></a-box>
 
-        <!-- Dein Modell -->
+        <!-- Modell -->
         <a-entity
-          gltf-model="url(./enno6_test.glb)"
+          model-status
+          gltf-model="#m"
           position="0 0.3 0"
           rotation="0 0 0"
           scale="5 5 5">
