@@ -3,25 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR Test Hiro</title>
+    <title>AR Test Hiro + GLB</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
   </head>
 
   <body style="margin:0; overflow:hidden; background:black;">
-    <a-scene
-      embedded
-      vr-mode-ui="enabled: false"
+    <a-scene embedded vr-mode-ui="enabled: false"
       arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
 
-     <a-marker preset="hiro">
-  <a-entity
-    gltf-model="url(enno5.glb)"
-    position="0 0 0"
-    rotation="0 0 0"
-    scale="2.5 2.5 2.5">
-  </a-entity>
-</a-marker>
+      <a-marker preset="hiro">
+        <!-- Licht direkt am Marker -->
+        <a-entity light="type: ambient; intensity: 2"></a-entity>
+        <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+
+        <!-- GLB: höher setzen + viel größer machen -->
+        <a-entity
+          gltf-model="url(./enno5.glb)"
+          position="0 0.5 0"
+          rotation="0 0 0"
+          scale="20 20 20">
+        </a-entity>
+
+        <!-- Referenz: kleine Box, damit du siehst wo der Marker ist -->
+        <a-box color="red" position="0 0.05 0" depth="0.1" height="0.1" width="0.1"></a-box>
+      </a-marker>
 
       <a-entity camera></a-entity>
     </a-scene>
