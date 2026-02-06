@@ -14,9 +14,14 @@
       vr-mode-ui="enabled: false"
       arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
 
-      <a-marker preset="hiro">
-        <a-box color="red" position="0 0.5 0" depth="0.2" height="0.5" width="0.5"></a-box>
-      </a-marker>
+     <a-marker preset="hiro">
+  <a-entity
+    gltf-model="url(enno5.glb)"
+    position="0 0 0"
+    rotation="0 0 0"
+    scale="2.5 2.5 2.5">
+  </a-entity>
+</a-marker>
 
       <a-entity camera></a-entity>
     </a-scene>
