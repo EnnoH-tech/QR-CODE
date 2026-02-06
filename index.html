@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR – QR Pattern + enno6_test</title>
+    <title>AR – Pattern Marker + Model (Debug)</title>
 
     <!-- A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <!-- AR.js -->
+    <!-- AR.js (A-Frame build) -->
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 
     <style>
@@ -16,67 +16,91 @@
         top: 10px;
         left: 10px;
         padding: 8px 10px;
-        background: rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.65);
         color: #fff;
-        font: 14px/1.2 -apple-system, system-ui, sans-serif;
+        font: 14px/1.25 -apple-system, system-ui, sans-serif;
         border-radius: 6px;
         z-index: 9999;
+        white-space: pre-line;
       }
     </style>
 
     <script>
-      AFRAME.registerComponent('model-status', {
+      AFRAME.registerComponent("hud", {
         init: function () {
-          const hud = document.getElementById('hud');
-          hud.textContent = 'MODEL: LOADING…';
+          const hud = document.getElementById("hud");
+          const marker = this.el;
 
-          this.el.addEventListener('model-loaded', () => {
-            hud.textContent = 'MODEL: LOADED';
+          const set = (s) => (hud.textContent = s);
+
+          set("MARKER: …\nMODEL: …");
+
+          marker.addEventListener("markerFound", () => {
+            set("MARKER: FOUND\nMODEL: (see below)");
           });
 
-          this.el.addEventListener('model-error', () => {
-            hud.textContent = 'MODEL: ERROR';
+          marker.addEventListener("markerLost", () => {
+            set("MARKER: LOST\nMODEL: (loaded?)");
           });
-        }
+        },
+      });
+
+      AFRAME.registerComponent("model-status", {
+        init: function () {
+          const hud = document.getElementById("hud");
+          const modelEl = this.el;
+
+          const setModelLine = (msg) => {
+            const lines = (hud.textContent || "").split("\n");
+            // keep first line (marker), overwrite second line (model)
+            const markerLine = lines[0] || "MARKER: …";
+            hud.textContent = `${markerLine}\nMODEL: ${msg}`;
+          };
+
+          setModelLine("LOADING…");
+
+          modelEl.addEventListener("model-loaded", () => setModelLine("LOADED"));
+          modelEl.addEventListener("model-error", () => setModelLine("ERROR"));
+        },
       });
     </script>
   </head>
 
-  <body style="margin:0; overflow:hidden; background:black;">
-    <div id="hud">MODEL: …</div>
+  <body style="margin: 0; overflow: hidden; background: black">
+    <div id="hud">MARKER: …\nMODEL: …</div>
 
     <a-scene
       embedded
       vr-mode-ui="enabled:false"
-      renderer="colorManagement: true"
-      arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
-
-      <!-- Assets -->
+      renderer="colorManagement:true"
+      arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;"
+    >
       <a-assets>
+        <!-- Deine Datei -->
         <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <!-- QR / Pattern Marker -->
-      <a-marker type="pattern" url="./patternbw.patt">
-
+      <!-- Pattern Marker -->
+      <a-marker hud type="pattern" url="./patternbw.patt">
         <!-- Licht -->
-        <a-entity light="type: ambient; intensity: 2"></a-entity>
+        <a-entity light="type: ambient; intensity: 1.6"></a-entity>
         <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-        <!-- Dein Modell -->
+        <!-- Debug-Objekt (muss erscheinen, sobald MARKER: FOUND) -->
+        <a-box position="0 0.25 0" depth="0.3" height="0.3" width="0.3"></a-box>
+
+        <!-- Modell (startet garantiert "auf" dem Marker, nicht 5m daneben) -->
         <a-entity
           model-status
           gltf-model="#model"
-          position="-5 0 0"
-          rotation="-90 0 0"
-          scale="3.5 3.5 3.5">
-        </a-entity>
-
+          position="0 0 0"
+          rotation="0 0 0"
+          scale="1 1 1"
+        ></a-entity>
       </a-marker>
 
       <!-- Kamera -->
       <a-entity camera></a-entity>
-
     </a-scene>
   </body>
 </html>
