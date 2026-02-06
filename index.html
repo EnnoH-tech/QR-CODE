@@ -1,12 +1,52 @@
-<a-marker preset="hiro">
-  <a-entity light="type: ambient; intensity: 2"></a-entity>
-  <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR Test – Hiro + GLB</title>
 
-  <a-entity
-    gltf-model="url(./enno2.glb)"
-    position="0 0.3 0"
-    scale="5 5 5">
-  </a-entity>
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- AR.js -->
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  </head>
 
-  <a-box color="red" position="0 0.05 0" depth="0.1" height="0.1" width="0.1"></a-box>
-</a-marker>
+  <body style="margin:0; overflow:hidden; background:black;">
+    <a-scene
+      embedded
+      vr-mode-ui="enabled:false"
+      renderer="colorManagement: true"
+      arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
+
+      <!-- HIRO MARKER -->
+      <a-marker preset="hiro">
+
+        <!-- LICHT (wichtig, sonst sieht man oft nichts) -->
+        <a-entity light="type: ambient; intensity: 2"></a-entity>
+        <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+
+        <!-- REFERENZ: rote Box (zeigt Marker funktioniert) -->
+        <a-box
+          color="red"
+          position="0 0.05 0"
+          depth="0.1"
+          height="0.1"
+          width="0.1">
+        </a-box>
+
+        <!-- DEIN GLB -->
+        <a-entity
+          gltf-model="url(./enno2.glb)"
+          position="0 0.3 0"
+          rotation="0 0 0"
+          scale="5 5 5">
+        </a-entity>
+
+      </a-marker>
+
+      <!-- KAMERA -->
+      <a-entity camera></a-entity>
+
+    </a-scene>
+  </body>
+</html>
