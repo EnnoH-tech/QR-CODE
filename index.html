@@ -3,11 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR – Pattern Marker + Model (Debug)</title>
+    <title>AR – Pattern Marker Debug (Hard)</title>
 
-    <!-- A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <!-- AR.js (A-Frame build) -->
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 
     <style>
@@ -16,7 +14,7 @@
         top: 10px;
         left: 10px;
         padding: 8px 10px;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(0,0,0,0.65);
         color: #fff;
         font: 14px/1.25 -apple-system, system-ui, sans-serif;
         border-radius: 6px;
@@ -24,74 +22,31 @@
         white-space: pre-line;
       }
     </style>
-
-    <script>
-      AFRAME.registerComponent("hud", {
-        init: function () {
-          const hud = document.getElementById("hud");
-          const marker = this.el;
-
-          const set = (s) => (hud.textContent = s);
-
-          set("MARKER: …\nMODEL: …");
-
-          marker.addEventListener("markerFound", () => {
-            set("MARKER: FOUND\nMODEL: (see below)");
-          });
-
-          marker.addEventListener("markerLost", () => {
-            set("MARKER: LOST\nMODEL: (loaded?)");
-          });
-        },
-      });
-
-      AFRAME.registerComponent("model-status", {
-        init: function () {
-          const hud = document.getElementById("hud");
-          const modelEl = this.el;
-
-          const setModelLine = (msg) => {
-            const lines = (hud.textContent || "").split("\n");
-            // keep first line (marker), overwrite second line (model)
-            const markerLine = lines[0] || "MARKER: …";
-            hud.textContent = `${markerLine}\nMODEL: ${msg}`;
-          };
-
-          setModelLine("LOADING…");
-
-          modelEl.addEventListener("model-loaded", () => setModelLine("LOADED"));
-          modelEl.addEventListener("model-error", () => setModelLine("ERROR"));
-        },
-      });
-    </script>
   </head>
 
-  <body style="margin: 0; overflow: hidden; background: black">
-    <div id="hud">MARKER: …\nMODEL: …</div>
+  <body style="margin:0; overflow:hidden; background:black;">
+    <div id="hud">BOOT: …</div>
 
     <a-scene
+      id="scene"
       embedded
       vr-mode-ui="enabled:false"
       renderer="colorManagement:true"
       arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;"
     >
       <a-assets>
-        <!-- Deine Datei -->
         <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <!-- Pattern Marker -->
-      <a-marker hud type="pattern" url="./patternbw.patt">
-        <!-- Licht -->
+      <a-marker id="m" type="pattern" url="./patternbw.patt">
         <a-entity light="type: ambient; intensity: 1.6"></a-entity>
         <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-        <!-- Debug-Objekt (muss erscheinen, sobald MARKER: FOUND) -->
+        <!-- Muss sichtbar sein sobald Marker FOUND -->
         <a-box position="0 0.25 0" depth="0.3" height="0.3" width="0.3"></a-box>
 
-        <!-- Modell (startet garantiert "auf" dem Marker, nicht 5m daneben) -->
         <a-entity
-          model-status
+          id="modelEnt"
           gltf-model="#model"
           position="0 0 0"
           rotation="0 0 0"
@@ -99,8 +54,83 @@
         ></a-entity>
       </a-marker>
 
-      <!-- Kamera -->
       <a-entity camera></a-entity>
     </a-scene>
+
+    <script>
+      const hud = document.getElementById("hud");
+      const scene = document.getElementById("scene");
+      const marker = document.getElementById("m");
+      const modelEnt = document.getElementById("modelEnt");
+
+      const set = (lines) => (hud.textContent = lines.join("\n"));
+
+      set([
+        "BOOT: starting…",
+        "SCENE: …",
+        "ARJS: …",
+        "MARKER: …",
+        "MODEL: …",
+      ]);
+
+      // Szene geladen?
+      scene.addEventListener("loaded", () => {
+        set([
+          "BOOT: ok",
+          "SCENE: loaded",
+          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
+          "MARKER: waiting",
+          "MODEL: waiting",
+        ]);
+      });
+
+      // Marker Events
+      marker.addEventListener("markerFound", () => {
+        set([
+          "BOOT: ok",
+          "SCENE: loaded",
+          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
+          "MARKER: FOUND",
+          "MODEL: (see status)",
+        ]);
+      });
+
+      marker.addEventListener("markerLost", () => {
+        set([
+          "BOOT: ok",
+          "SCENE: loaded",
+          "ARJS: " + (scene.systems && scene.systems["arjs"] ? "present" : "missing"),
+          "MARKER: LOST",
+          "MODEL: (loaded?)",
+        ]);
+      });
+
+      // Modell Events
+      modelEnt.addEventListener("model-loaded", () => {
+        const lines = hud.textContent.split("\n");
+        lines[4] = "MODEL: LOADED";
+        hud.textContent = lines.join("\n");
+      });
+
+      modelEnt.addEventListener("model-error", () => {
+        const lines = hud.textContent.split("\n");
+        lines[4] = "MODEL: ERROR";
+        hud.textContent = lines.join("\n");
+      });
+
+      // Falls gar nichts feuert, nach 3s einen Status-Snapshot
+      setTimeout(() => {
+        const arjsPresent = !!(scene.systems && scene.systems["arjs"]);
+        const hasVideo = !!document.querySelector("video");
+
+        set([
+          "BOOT: ok (timeout snapshot)",
+          "SCENE: " + (scene.hasLoaded ? "loaded" : "not loaded"),
+          "ARJS: " + (arjsPresent ? "present" : "missing"),
+          "VIDEO: " + (hasVideo ? "present" : "missing"),
+          "MARKER: no events yet",
+        ]);
+      }, 3000);
+    </script>
   </body>
 </html>
