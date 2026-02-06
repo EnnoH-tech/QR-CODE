@@ -5,16 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AR Debug – Hiro + enno6_test</title>
 
+    <!-- A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- AR.js -->
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 
     <style>
-      #hud{
-        position:fixed; left:10px; top:10px;
-        background:rgba(0,0,0,0.6);
-        color:#fff; padding:8px 10px;
-        font:14px/1.2 -apple-system, system-ui, sans-serif;
-        z-index:9999; border-radius:6px;
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        padding: 8px 10px;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        font: 14px/1.2 -apple-system, system-ui, sans-serif;
+        border-radius: 6px;
+        z-index: 9999;
       }
     </style>
 
@@ -22,17 +28,14 @@
       AFRAME.registerComponent('model-status', {
         init: function () {
           const hud = document.getElementById('hud');
-          const set = (t) => hud.textContent = t;
-
-          set('MODEL: LOADING…');
+          hud.textContent = 'MODEL: LOADING…';
 
           this.el.addEventListener('model-loaded', () => {
-            set('MODEL: LOADED');
+            hud.textContent = 'MODEL: LOADED';
           });
 
-          this.el.addEventListener('model-error', (e) => {
-            console.log('model-error', e);
-            set('MODEL: ERROR (GLB lädt nicht oder ist inkompatibel)');
+          this.el.addEventListener('model-error', () => {
+            hud.textContent = 'MODEL: ERROR';
           });
         }
       });
@@ -48,28 +51,41 @@
       renderer="colorManagement: true"
       arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: true;">
 
+      <!-- Assets -->
       <a-assets>
-        <a-asset-item id="m" src="./enno6_test.glb"></a-asset-item>
+        <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
       </a-assets>
 
+      <!-- Hiro Marker -->
       <a-marker preset="hiro">
+
+        <!-- Licht -->
         <a-entity light="type: ambient; intensity: 2"></a-entity>
         <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-        <!-- rote Referenzbox -->
-        <a-box color="red" position="0 0.05 0" depth="0.1" height="0.1" width="0.1"></a-box>
+        <!-- Referenz: roter Kasten -->
+        <a-box
+          color="red"
+          position="0 0.05 0"
+          depth="0.1"
+          height="0.1"
+          width="0.1">
+        </a-box>
 
-        <!-- Modell -->
+        <!-- Dein Modell – Greifhaken-Version -->
         <a-entity
           model-status
-          gltf-model="#m"
-          position="0 0.3 0"
-          rotation="0 0 0"
-          scale="5 5 5">
+          gltf-model="#model"
+          position="0 0 0"
+          rotation="-90 0 0"
+          scale="0.5 0.5 0.5">
         </a-entity>
+
       </a-marker>
 
+      <!-- Kamera -->
       <a-entity camera></a-entity>
+
     </a-scene>
   </body>
 </html>
