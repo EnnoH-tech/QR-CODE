@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Perspective Tilt (fixed)</title>
+  <title>MindAR + GLB (targets2.mind) + Perspective Tilt</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,36 +42,45 @@
   </style>
 
   <script>
-    // Extra tilt based on viewing angle (exaggerated perspective)
+    /**
+     * perspective-tilt
+     * Adds extra tilt based on camera position relative to the anchor (exaggerated perspective).
+     */
     AFRAME.registerComponent("perspective-tilt", {
       schema: {
         anchor:   { type: "selector" },            // #anchor
-        strength: { type: "number", default: 1.8 },// bigger = more taper
-        maxDeg:   { type: "number", default: 35 }, // clamp
-        lerp:     { type: "number", default: 0.30 }// smoothing
+        strength: { type: "number", default: 1.6 },// start moderate; increase later
+        maxDeg:   { type: "number", default: 30 }, // clamp
+        lerp:     { type: "number", default: 0.30 }
       },
+
       init() {
         this.vCamW = new THREE.Vector3();
         this.vCamL = new THREE.Vector3();
       },
+
       tick() {
         const anchorEl = this.data.anchor;
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
         if (!anchorEl || !cam) return;
 
         cam.getWorldPosition(this.vCamW);
+
+        // camera pos into anchor-local coordinates
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
-        // yaw/pitch relative to target normal
+        // angles relative to anchor normal
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
         const max = THREE.MathUtils.degToRad(this.data.maxDeg);
 
-        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,    -max, max);
-        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength, -max, max);
+        // exaggerate + clamp
+        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,     -max, max);
+        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength,  -max, max);
 
+        // smooth
         const rot = this.el.object3D.rotation;
         rot.x = THREE.MathUtils.lerp(rot.x, rx, this.data.lerp);
         rot.y = THREE.MathUtils.lerp(rot.y, ry, this.data.lerp);
@@ -108,14 +117,13 @@
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
         <a-entity id="surface" position="0 0 0.01">
-          <!-- optionaler Offset-Parent -->
           <a-entity id="offset" position="0 0 0">
 
-            <!-- WICHTIG: erst die Position (placeRig), dann tilt (tiltRig) -->
+            <!-- Erst Platzierung, dann Tilt (damit der -5 Offset nicht "wegschwenkt") -->
             <a-entity id="placeRig" position="-5 0 0">
               <a-entity
                 id="tiltRig"
-                perspective-tilt="anchor:#anchor; strength:1.8; maxDeg:35; lerp:0.3"
+                perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:30; lerp:0.3"
               >
                 <a-entity
                   id="modelEnt"
@@ -176,8 +184,31 @@
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
-    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
+    modelEnt.addEventListener("model-loaded", () => {
+      hud.textContent += "\nGLB: LOADED";
+
+      // CRITICAL FIX: prevent disappearing when viewed from the "back" after extra tilt
+      const mesh = modelEnt.getObject3D("mesh");
+      if (!mesh) return;
+
+      mesh.traverse(o => {
+        if (!o.material) return;
+
+        // show both sides (avoids backface-culling vanish)
+        o.material.side = THREE.DoubleSide;
+
+        // keep it solid and stable in AR compositing
+        o.material.transparent = false;
+        o.material.opacity = 1;
+        o.material.depthWrite = true;
+        o.material.depthTest = true;
+
+        o.material.needsUpdate = true;
+      });
+    });
+
+    modelEnt.addEventListener("model-error", () => { hud.textContent += "\nGLB: ERROR"; });
   </script>
 </body>
 </html>
+
