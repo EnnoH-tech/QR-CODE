@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Scale-by-Distance</title>
+  <title>MindAR + GLB (targets2.mind) + Scale-by-Distance + Perspective</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,15 +42,16 @@
   </style>
 
   <script>
-    // Scales an entity based on camera <-> target distance, with smoothing (lerp).
+    // 1) Scale based on camera <-> target distance (with optional non-linear "power" for stronger jumps)
     AFRAME.registerComponent("scale-by-distance", {
       schema: {
         target:   { type: "selector" }, // e.g. #anchor
-        minScale: { type: "number", default: 2.0 }, // far
-        maxScale: { type: "number", default: 3.5 }, // near
-        minDist:  { type: "number", default: 0.35 }, // near distance
-        maxDist:  { type: "number", default: 1.60 }, // far distance
-        lerp:     { type: "number", default: 0.30 }  // smoothing (requested)
+        minScale: { type: "number", default: 1.8 }, // far
+        maxScale: { type: "number", default: 4.8 }, // near
+        minDist:  { type: "number", default: 0.30 }, // near distance
+        maxDist:  { type: "number", default: 1.70 }, // far distance
+        power:    { type: "number", default: 1.8 },  // >1 = stronger size jumps (moderate)
+        lerp:     { type: "number", default: 0.30 }  // smoothing
       },
 
       init() {
@@ -70,16 +71,62 @@
 
         const dist = this.vCam.distanceTo(this.vTar);
 
-        // clamp distance into [minDist, maxDist]
-        const d = THREE.MathUtils.clamp(dist, this.data.minDist, this.data.maxDist);
+        // normalize distance to 0..1 (0=near, 1=far)
+        let n = (dist - this.data.minDist) / (this.data.maxDist - this.data.minDist);
+        n = THREE.MathUtils.clamp(n, 0, 1);
 
-        // map distance -> scale (invert so near => bigger)
-        const u = 1 - (d - this.data.minDist) / (this.data.maxDist - this.data.minDist);
-        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, u);
+        // invert so near => 1, far => 0
+        n = 1 - n;
+
+        // non-linear for stronger jumps (but not crazy)
+        n = Math.pow(n, this.data.power);
+
+        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, n);
 
         this.vGoal.set(s, s, s);
         this.vCur.lerp(this.vGoal, this.data.lerp);
         this.el.object3D.scale.copy(this.vCur);
+      }
+    });
+
+    // 2) Perspective "flight"/taper when looking at the target at an angle:
+    // We add a gentle extra tilt based on view angle (keeps your placement intact).
+    AFRAME.registerComponent("perspective-tilt", {
+      schema: {
+        anchor:   { type: "selector" },             // #anchor
+        strength: { type: "number", default: 1.25 },// moderate (safe)
+        maxDeg:   { type: "number", default: 22 },  // moderate clamp
+        lerp:     { type: "number", default: 0.30 } // smoothing
+      },
+
+      init() {
+        this.vCamW = new THREE.Vector3();
+        this.vCamL = new THREE.Vector3();
+      },
+
+      tick() {
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        const anchorEl = this.data.anchor;
+        if (!cam || !anchorEl) return;
+
+        cam.getWorldPosition(this.vCamW);
+
+        // camera position in anchor LOCAL space
+        this.vCamL.copy(this.vCamW);
+        anchorEl.object3D.worldToLocal(this.vCamL);
+
+        // angles relative to anchor normal
+        const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
+        const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
+
+        const max = THREE.MathUtils.degToRad(this.data.maxDeg);
+
+        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,     -max, max);
+        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength,  -max, max);
+
+        const r = this.el.object3D.rotation;
+        r.x = THREE.MathUtils.lerp(r.x, rx, this.data.lerp);
+        r.y = THREE.MathUtils.lerp(r.y, ry, this.data.lerp);
       }
     });
   </script>
@@ -111,28 +158,37 @@
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-      <!-- Wenn targets2.mind nur 1 Target enthält: targetIndex 0 -->
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <!-- minimal vor die Fläche, damit kein Flimmern -->
         <a-entity id="surface" position="0 0 0.01">
-          <!-- optionaler Offset -->
           <a-entity id="offset" position="0 0 0">
-            <a-entity
-              id="modelEnt"
-              gltf-model="#model"
-              visible="false"
-              position="-1 0 0"
-              rotation="0 0 0"
-              scale="2.75 2.75 2.75"
-              scale-by-distance="
-                target: #anchor;
-                minScale: 2.0;
-                maxScale: 3.5;
-                minDist: 0.35;
-                maxDist: 1.60;
-                lerp: 0.30
-              "
-            ></a-entity>
+
+            <!-- IMPORTANT: keep your placement (-1 0 0) on a parent,
+                 then apply perspective-tilt on a child so we don't "swing" the offset away -->
+            <a-entity id="placeRig" position="-1 0 0">
+              <a-entity
+                id="tiltRig"
+                perspective-tilt="anchor:#anchor; strength:1.25; maxDeg:22; lerp:0.30"
+              >
+                <a-entity
+                  id="modelEnt"
+                  gltf-model="#model"
+                  visible="false"
+                  position="0 0 0"
+                  rotation="0 0 0"
+                  scale="2.75 2.75 2.75"
+                  scale-by-distance="
+                    target: #anchor;
+                    minScale: 1.8;
+                    maxScale: 4.8;
+                    minDist: 0.30;
+                    maxDist: 1.70;
+                    power: 1.8;
+                    lerp: 0.30
+                  "
+                ></a-entity>
+              </a-entity>
+            </a-entity>
+
           </a-entity>
         </a-entity>
       </a-entity>
@@ -142,7 +198,6 @@
   </div>
 
   <script>
-    // iOS dynamic viewport height fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
@@ -153,7 +208,6 @@
     const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
 
-    // Quick check: ist targets2.mind erreichbar?
     fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
       .then(() => { hud.textContent += "\nTARGETS2: OK"; })
@@ -167,8 +221,10 @@
       } catch {}
     });
 
-    // MindAR system events
-    scene.addEventListener("arReady", () => { hud.textContent = "AR: READY\nTARGET: scanning…"; });
+    scene.addEventListener("arReady", () => {
+      hud.textContent = "AR: READY\nTARGET: scanning…";
+    });
+
     scene.addEventListener("arError", (e) => {
       const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
       hud.textContent = "AR: ERROR\n" + msg;
@@ -184,8 +240,24 @@
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
-    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
+    modelEnt.addEventListener("model-loaded", () => {
+      hud.textContent += "\nGLB: LOADED";
+
+      // Safety: if the tilt makes you view "from behind", keep it visible
+      const mesh = modelEnt.getObject3D("mesh");
+      if (!mesh) return;
+
+      mesh.traverse(o => {
+        if (!o.isMesh || !o.material) return;
+        o.frustumCulled = false;
+        o.material.side = THREE.DoubleSide;
+        o.material.needsUpdate = true;
+      });
+    });
+
+    modelEnt.addEventListener("model-error", () => {
+      hud.textContent += "\nGLB: ERROR";
+    });
   </script>
 </body>
 </html>
