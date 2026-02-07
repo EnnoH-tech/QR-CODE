@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Perspective Tilt (visible fix)</title>
+  <title>MindAR + GLB (targets2.mind) + Perspective Tilt (debug visible)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -116,7 +116,7 @@
                  material="color: #00ff66; opacity: 0.9;">
           </a-box>
 
-          <!-- Hier platzierst du den Content: START erstmal nahe am Anchor! -->
+          <!-- Content nahe am Anchor, damit er garantiert im Bild ist -->
           <a-entity id="placeRig" position="0 0 0.02">
             <a-entity
               id="tiltRig"
@@ -125,10 +125,10 @@
               <a-entity
                 id="modelEnt"
                 gltf-model="#model"
-                visible="false"
-                position="0 0 0"
+                visible="true"          <!-- DEBUG: immer sichtbar -->
+                position="0 0 0.03"     <!-- leicht vor der Fläche -->
                 rotation="0 0 0"
-                scale="1 1 1"
+                scale="2.75 2.75 2.75"  <!-- wieder groß -->
               ></a-entity>
             </a-entity>
           </a-entity>
@@ -170,25 +170,21 @@
       hud.textContent = "AR: ERROR\n" + msg;
     });
 
+    // DEBUG: Visibility stays true. We keep HUD updates only.
     anchor.addEventListener("targetFound", () => {
-      modelEnt.setAttribute("visible", "true");
-      hud.textContent = "TARGET: FOUND\nMODEL: visible";
+      hud.textContent = "TARGET: FOUND\nMODEL: forced visible (debug)";
     });
 
     anchor.addEventListener("targetLost", () => {
-      modelEnt.setAttribute("visible", "false");
-      hud.textContent = "TARGET: LOST\nMODEL: hidden";
+      hud.textContent = "TARGET: LOST\nMODEL: forced visible (debug)";
     });
 
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // Make sure it never disappears due to culling / single-sided materials
+      // Prevent disappearing due to culling / single-sided materials
       const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) {
-        hud.textContent += "\nMESH: not found";
-        return;
-      }
+      if (!mesh) { hud.textContent += "\nMESH: not found"; return; }
 
       mesh.frustumCulled = false;
 
@@ -196,16 +192,11 @@
         if (!o.isMesh || !o.material) return;
 
         o.frustumCulled = false;
-
-        // show both sides (important if tilt makes you see the "back")
         o.material.side = THREE.DoubleSide;
-
-        // keep it solid
         o.material.transparent = false;
         o.material.opacity = 1;
         o.material.depthWrite = true;
         o.material.depthTest = true;
-
         o.material.needsUpdate = true;
       });
 
