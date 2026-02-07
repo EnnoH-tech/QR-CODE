@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Perspective Tilt (debug visible)</title>
+  <title>MindAR + GLB (targets2.mind) + Perspective Tilt</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,13 +42,13 @@
   </style>
 
   <script>
-    // Exaggerated tilt to enhance perspective taper when viewing at an angle
+    // Extra tilt based on viewing angle (exaggerated perspective)
     AFRAME.registerComponent("perspective-tilt", {
       schema: {
-        anchor:   { type: "selector" },
-        strength: { type: "number", default: 1.6 },
-        maxDeg:   { type: "number", default: 35 },
-        lerp:     { type: "number", default: 0.30 }
+        anchor:   { type: "selector" },            // #anchor
+        strength: { type: "number", default: 1.6 },// mehr = stärkere Verjüngung
+        maxDeg:   { type: "number", default: 35 }, // clamp
+        lerp:     { type: "number", default: 0.30 }// smoothing
       },
       init() {
         this.vCamW = new THREE.Vector3();
@@ -60,9 +60,12 @@
         if (!anchorEl || !cam) return;
 
         cam.getWorldPosition(this.vCamW);
+
+        // Kamera in Anchor-Localspace
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
+        // Winkel relativ zur Target-Normale
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
@@ -106,33 +109,27 @@
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <!-- leicht vor der Fläche -->
         <a-entity id="surface" position="0 0 0.01">
+          <a-entity id="offset" position="0 0 0">
 
-          <!-- DEBUG: zeigt dir zuverlässig, wo das Target ist -->
-          <a-box id="debugBox"
-                 depth="0.01" height="0.06" width="0.06"
-                 position="0 0 0"
-                 material="color: #00ff66; opacity: 0.9;">
-          </a-box>
-
-          <!-- Content nahe am Anchor, damit er garantiert im Bild ist -->
-          <a-entity id="placeRig" position="0 0 0.02">
-            <a-entity
-              id="tiltRig"
-              perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
-            >
+            <!-- WICHTIG: Offset/Placement zuerst, dann Tilt -->
+            <a-entity id="placeRig" position="-5 0 0">
               <a-entity
-                id="modelEnt"
-                gltf-model="#model"
-                visible="true"          <!-- DEBUG: immer sichtbar -->
-                position="0 0 0.03"     <!-- leicht vor der Fläche -->
-                rotation="0 0 0"
-                scale="2.75 2.75 2.75"  <!-- wieder groß -->
-              ></a-entity>
+                id="tiltRig"
+                perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
+              >
+                <a-entity
+                  id="modelEnt"
+                  gltf-model="#model"
+                  visible="false"
+                  position="0 0 0.03"
+                  rotation="0 0 0"
+                  scale="2.75 2.75 2.75"
+                ></a-entity>
+              </a-entity>
             </a-entity>
-          </a-entity>
 
+          </a-entity>
         </a-entity>
       </a-entity>
 
@@ -170,42 +167,40 @@
       hud.textContent = "AR: ERROR\n" + msg;
     });
 
-    // DEBUG: Visibility stays true. We keep HUD updates only.
     anchor.addEventListener("targetFound", () => {
-      hud.textContent = "TARGET: FOUND\nMODEL: forced visible (debug)";
+      modelEnt.setAttribute("visible", "true");
+      hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
     anchor.addEventListener("targetLost", () => {
-      hud.textContent = "TARGET: LOST\nMODEL: forced visible (debug)";
+      modelEnt.setAttribute("visible", "false");
+      hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // Prevent disappearing due to culling / single-sided materials
+      // Wichtig bei zusätzlichem Tilt: sonst verschwindet es beim Blick "von hinten"
       const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) { hud.textContent += "\nMESH: not found"; return; }
-
-      mesh.frustumCulled = false;
+      if (!mesh) return;
 
       mesh.traverse(o => {
         if (!o.isMesh || !o.material) return;
 
+        // keine Backface-Überraschungen + kein Culling
         o.frustumCulled = false;
         o.material.side = THREE.DoubleSide;
+
+        // solide
         o.material.transparent = false;
         o.material.opacity = 1;
         o.material.depthWrite = true;
         o.material.depthTest = true;
         o.material.needsUpdate = true;
       });
-
-      hud.textContent += "\nMESH: OK";
     });
 
-    modelEnt.addEventListener("model-error", () => {
-      hud.textContent += "\nGLB: ERROR";
-    });
+    modelEnt.addEventListener("model-error", () => { hud.textContent += "\nGLB: ERROR"; });
   </script>
 </body>
 </html>
