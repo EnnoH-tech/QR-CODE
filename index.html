@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Perspective Tilt</title>
+  <title>MindAR + GLB (targets2.mind) + Perspective Tilt (visible fix)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,45 +42,35 @@
   </style>
 
   <script>
-    /**
-     * perspective-tilt
-     * Adds extra tilt based on camera position relative to the anchor (exaggerated perspective).
-     */
+    // Exaggerated tilt to enhance perspective taper when viewing at an angle
     AFRAME.registerComponent("perspective-tilt", {
       schema: {
-        anchor:   { type: "selector" },            // #anchor
-        strength: { type: "number", default: 1.6 },// start moderate; increase later
-        maxDeg:   { type: "number", default: 30 }, // clamp
+        anchor:   { type: "selector" },
+        strength: { type: "number", default: 1.6 },
+        maxDeg:   { type: "number", default: 35 },
         lerp:     { type: "number", default: 0.30 }
       },
-
       init() {
         this.vCamW = new THREE.Vector3();
         this.vCamL = new THREE.Vector3();
       },
-
       tick() {
         const anchorEl = this.data.anchor;
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
         if (!anchorEl || !cam) return;
 
         cam.getWorldPosition(this.vCamW);
-
-        // camera pos into anchor-local coordinates
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
-        // angles relative to anchor normal
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
         const max = THREE.MathUtils.degToRad(this.data.maxDeg);
 
-        // exaggerate + clamp
         const ry = THREE.MathUtils.clamp(yaw * this.data.strength,     -max, max);
         const rx = THREE.MathUtils.clamp(-pitch * this.data.strength,  -max, max);
 
-        // smooth
         const rot = this.el.object3D.rotation;
         rot.x = THREE.MathUtils.lerp(rot.x, rx, this.data.lerp);
         rot.y = THREE.MathUtils.lerp(rot.y, ry, this.data.lerp);
@@ -116,27 +106,33 @@
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+        <!-- leicht vor der Fläche -->
         <a-entity id="surface" position="0 0 0.01">
-          <a-entity id="offset" position="0 0 0">
 
-            <!-- Erst Platzierung, dann Tilt (damit der -5 Offset nicht "wegschwenkt") -->
-            <a-entity id="placeRig" position="-5 0 0">
+          <!-- DEBUG: zeigt dir zuverlässig, wo das Target ist -->
+          <a-box id="debugBox"
+                 depth="0.01" height="0.06" width="0.06"
+                 position="0 0 0"
+                 material="color: #00ff66; opacity: 0.9;">
+          </a-box>
+
+          <!-- Hier platzierst du den Content: START erstmal nahe am Anchor! -->
+          <a-entity id="placeRig" position="0 0 0.02">
+            <a-entity
+              id="tiltRig"
+              perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
+            >
               <a-entity
-                id="tiltRig"
-                perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:30; lerp:0.3"
-              >
-                <a-entity
-                  id="modelEnt"
-                  gltf-model="#model"
-                  visible="false"
-                  position="0 0 0"
-                  rotation="0 0 0"
-                  scale="2.75 2.75 2.75"
-                ></a-entity>
-              </a-entity>
+                id="modelEnt"
+                gltf-model="#model"
+                visible="false"
+                position="0 0 0"
+                rotation="0 0 0"
+                scale="1 1 1"
+              ></a-entity>
             </a-entity>
-
           </a-entity>
+
         </a-entity>
       </a-entity>
 
@@ -187,17 +183,24 @@
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // CRITICAL FIX: prevent disappearing when viewed from the "back" after extra tilt
+      // Make sure it never disappears due to culling / single-sided materials
       const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) return;
+      if (!mesh) {
+        hud.textContent += "\nMESH: not found";
+        return;
+      }
+
+      mesh.frustumCulled = false;
 
       mesh.traverse(o => {
-        if (!o.material) return;
+        if (!o.isMesh || !o.material) return;
 
-        // show both sides (avoids backface-culling vanish)
+        o.frustumCulled = false;
+
+        // show both sides (important if tilt makes you see the "back")
         o.material.side = THREE.DoubleSide;
 
-        // keep it solid and stable in AR compositing
+        // keep it solid
         o.material.transparent = false;
         o.material.opacity = 1;
         o.material.depthWrite = true;
@@ -205,10 +208,13 @@
 
         o.material.needsUpdate = true;
       });
+
+      hud.textContent += "\nMESH: OK";
     });
 
-    modelEnt.addEventListener("model-error", () => { hud.textContent += "\nGLB: ERROR"; });
+    modelEnt.addEventListener("model-error", () => {
+      hud.textContent += "\nGLB: ERROR";
+    });
   </script>
 </body>
 </html>
-
