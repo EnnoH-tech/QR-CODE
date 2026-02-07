@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + stronger scale + safe perspective</title>
+  <title>MindAR + GLB (DEBUG sicher sichtbar)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,104 +42,15 @@
   </style>
 
   <script>
-    // --- HUD safe logger + error trap (so du siehst sofort, falls JS crasht)
-    function hudLog(msg){
+    // --- robust HUD logger (nichts wird mehr überschrieben)
+    const LOG = [];
+    function log(line){
+      LOG.push(line);
+      if (LOG.length > 30) LOG.shift();
       const hud = document.getElementById("hud");
-      if (!hud) return;
-      hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + msg;
+      if (hud) hud.textContent = LOG.join("\n");
     }
-    window.addEventListener("error", (e) => {
-      hudLog("JS ERROR: " + (e.message || "unknown"));
-    });
-
-    // 1) Scale by distance, BUT with a safe non-linear curve for bigger jumps
-    AFRAME.registerComponent("scale-by-distance", {
-      schema: {
-        target:   { type: "selector" }, // e.g. #anchor
-        minScale: { type: "number", default: 2.0 }, // far
-        maxScale: { type: "number", default: 5.2 }, // near (deutlich stärker, aber safe)
-        minDist:  { type: "number", default: 0.35 },
-        maxDist:  { type: "number", default: 1.60 },
-        power:    { type: "number", default: 2.3 }, // stärkere Sprünge ohne Eskalation
-        lerp:     { type: "number", default: 0.30 }
-      },
-
-      init() {
-        this.vCam = new THREE.Vector3();
-        this.vTar = new THREE.Vector3();
-        this.vGoal = new THREE.Vector3(1, 1, 1);
-        this.vCur  = new THREE.Vector3(1, 1, 1);
-      },
-
-      tick() {
-        const t = this.data.target;
-        const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        if (!t || !cam) return;
-
-        cam.getWorldPosition(this.vCam);
-        t.object3D.getWorldPosition(this.vTar);
-
-        const dist = this.vCam.distanceTo(this.vTar);
-
-        let n = (dist - this.data.minDist) / (this.data.maxDist - this.data.minDist);
-        n = THREE.MathUtils.clamp(n, 0, 1);
-
-        n = 1 - n;               // near => 1
-        n = Math.pow(n, this.data.power);
-
-        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, n);
-
-        this.vGoal.set(s, s, s);
-        this.vCur.lerp(this.vGoal, this.data.lerp);
-        this.el.object3D.scale.copy(this.vCur);
-      }
-    });
-
-    // 2) Safe "perspective flucht" WITHOUT rotating (so it cannot swing out of view)
-    // It compresses X/Y based on how oblique the view is -> reads like tapering in perspective.
-    AFRAME.registerComponent("safe-flucht", {
-      schema: {
-        anchor: { type: "selector" },              // #anchor
-        amount: { type: "number", default: 0.55 }, // stronger = more taper
-        max:    { type: "number", default: 0.60 }, // max compression
-        lerp:   { type: "number", default: 0.30 }
-      },
-
-      init() {
-        this.vCamW = new THREE.Vector3();
-        this.vCamL = new THREE.Vector3();
-        this.curX = 1;
-        this.curY = 1;
-      },
-
-      tick() {
-        const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        const anchorEl = this.data.anchor;
-        if (!cam || !anchorEl) return;
-
-        cam.getWorldPosition(this.vCamW);
-        this.vCamL.copy(this.vCamW);
-        anchorEl.object3D.worldToLocal(this.vCamL);
-
-        // angles in radians
-        const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
-        const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
-
-        // use absolute obliqueness (0..~)
-        const obX = Math.min(Math.abs(yaw)   / (Math.PI/3), 1); // normalize to ~60°
-        const obY = Math.min(Math.abs(pitch) / (Math.PI/3), 1);
-
-        // compression factors (1 down to 1-max)
-        const targetX = 1 - THREE.MathUtils.clamp(obX * this.data.amount, 0, this.data.max);
-        const targetY = 1 - THREE.MathUtils.clamp(obY * this.data.amount, 0, this.data.max);
-
-        this.curX = THREE.MathUtils.lerp(this.curX, targetX, this.data.lerp);
-        this.curY = THREE.MathUtils.lerp(this.curY, targetY, this.data.lerp);
-
-        // apply ONLY anisotropic scale -> no swinging out of frame
-        this.el.object3D.scale.set(this.curX, this.curY, 1);
-      }
-    });
+    window.addEventListener("error", (e) => log("JS ERROR: " + (e.message || "unknown")));
   </script>
 </head>
 
@@ -171,35 +82,24 @@
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
         <a-entity id="surface" position="0 0 0.01">
+
+          <!-- PROBE: muss bei FOUND sichtbar werden -->
+          <a-box id="probe"
+                 visible="false"
+                 position="0 0 0.03"
+                 depth="0.06" height="0.06" width="0.06"
+                 material="color:#ff0000; opacity:0.95">
+          </a-box>
+
           <a-entity id="offset" position="0 0 0">
-
-            <!-- Dein funktionierender Offset bleibt EXACT so: -->
-            <a-entity id="placeRig" position="-1 0 0">
-
-              <!-- Flucht wirkt als "sicherer" Effekt auf Parent (nur Scale X/Y) -->
-              <a-entity id="fluchtRig" safe-flucht="anchor:#anchor; amount:0.55; max:0.60; lerp:0.30">
-
-                <a-entity
-                  id="modelEnt"
-                  gltf-model="#model"
-                  visible="false"
-                  position="0 0 0"
-                  rotation="0 0 0"
-                  scale="2.75 2.75 2.75"
-                  scale-by-distance="
-                    target: #anchor;
-                    minScale: 2.0;
-                    maxScale: 5.2;
-                    minDist: 0.35;
-                    maxDist: 1.60;
-                    power: 2.3;
-                    lerp: 0.30
-                  "
-                ></a-entity>
-
-              </a-entity>
-            </a-entity>
-
+            <a-entity
+              id="modelEnt"
+              gltf-model="#model"
+              visible="false"
+              position="-1 0 0"
+              rotation="0 0 0"
+              scale="2.75 2.75 2.75"
+            ></a-entity>
           </a-entity>
         </a-entity>
       </a-entity>
@@ -215,49 +115,59 @@
     window.addEventListener('resize', setVH);
     window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
 
-    const hud = document.getElementById("hud");
     const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
+    const probe = document.getElementById("probe");
 
-    function log(line){
-      hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + line;
-    }
-
-    // Quick check: ist targets2.mind erreichbar?
+    // Checks
     fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
       .then(() => { log("TARGETS2: OK"); })
       .catch(e => { log("TARGETS2: FAIL (" + e.message + ")"); });
 
+    fetch("/QR-CODE/enno6_test.glb", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(() => { log("GLB FETCH: OK"); })
+      .catch(e => { log("GLB FETCH: FAIL (" + e.message + ")"); });
+
     scene.addEventListener("loaded", () => {
-      hud.textContent = "SCENE: loaded\nTARGET: scanning…";
+      log("SCENE: loaded");
       try {
         const r = scene.renderer;
         if (r && r.setClearColor) r.setClearColor(0x000000, 0);
       } catch {}
     });
 
-    scene.addEventListener("arReady", () => { log("AR: READY"); });
+    scene.addEventListener("arReady", () => log("AR: READY"));
     scene.addEventListener("arError", (e) => {
       const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
       log("AR: ERROR " + msg);
     });
 
     anchor.addEventListener("targetFound", () => {
-      modelEnt.setAttribute("visible", "true");
       log("TARGET: FOUND");
+
+      // Probe sichtbar machen (wenn du die NICHT siehst, ist 3D Placement/Render falsch)
+      probe.setAttribute("visible", "true");
+
+      // Jetzt erzwingen wir: Modell direkt auf den Marker (damit es garantiert im Bild ist)
+      modelEnt.setAttribute("position", "0 0 0.03");
+      modelEnt.setAttribute("scale", "2.75 2.75 2.75");
+      modelEnt.setAttribute("rotation", "0 0 0");
+      modelEnt.setAttribute("visible", "true");
     });
 
     anchor.addEventListener("targetLost", () => {
-      modelEnt.setAttribute("visible", "false");
       log("TARGET: LOST");
+      probe.setAttribute("visible", "false");
+      modelEnt.setAttribute("visible", "false");
     });
 
     modelEnt.addEventListener("model-loaded", () => {
       log("GLB: LOADED");
 
-      // Keep it visible from all sides (sicher)
+      // Make sure it never disappears because of backfaces/culling
       const mesh = modelEnt.getObject3D("mesh");
       if (!mesh) { log("MESH: missing"); return; }
 
@@ -267,9 +177,11 @@
         o.material.side = THREE.DoubleSide;
         o.material.needsUpdate = true;
       });
+
+      log("MESH: OK");
     });
 
-    modelEnt.addEventListener("model-error", () => { log("GLB: ERROR"); });
+    modelEnt.addEventListener("model-error", () => log("GLB: ERROR"));
   </script>
 </body>
 </html>
