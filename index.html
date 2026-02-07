@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2 + sticker + center)</title>
+  <title>MindAR + GLB (targets2 visible debug)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -58,24 +58,32 @@
         <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <a-entity light="type: ambient; intensity: 1.2"></a-entity>
-      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+      <a-entity light="type: ambient; intensity: 1.6"></a-entity>
+      <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <!-- Sticker-Ebene: sehr nah an der Targetfläche -->
-        <a-entity id="surface" position="0 0 0.002">
-          <!-- wrapper für Auto-Center + optionales Nudge -->
-          <a-entity id="wrap" position="0 0 0" rotation="0 0 0">
-            <a-entity
-              id="modelEnt"
-              gltf-model="#model"
-              visible="false"
-              position="0 0 0"
-              rotation="-90 0 0"
-              scale="0.75 0.75 0.02"
-            ></a-entity>
-          </a-entity>
-        </a-entity>
+
+        <!-- Referenzfläche: wenn du DIE siehst, stimmt dein Anchor -->
+        <a-plane
+          id="ref"
+          position="0 0 0.001"
+          rotation="0 0 0"
+          width="1.2"
+          height="0.6"
+          material="color: #ffffff; opacity: 0.12; transparent: true; side: double;"
+          visible="false"
+        ></a-plane>
+
+        <!-- Modell: leicht vor der Fläche -->
+        <a-entity
+          id="modelEnt"
+          gltf-model="#model"
+          visible="false"
+          position="0 0 0.03"
+          rotation="0 0 0"
+          scale="0.75 0.75 0.75"
+        ></a-entity>
+
       </a-entity>
 
       <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
@@ -91,19 +99,8 @@
     const hud = document.getElementById("hud");
     const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
-    const wrap = document.getElementById("wrap");
     const modelEnt = document.getElementById("modelEnt");
-
-    // Feintuning falls du nach Auto-Center noch minimal schieben willst:
-    const nudgeX = 0.00;   // + = nach rechts (für "mehr Mitte zwischen den Wörtern")
-    const nudgeY = 0.00;   // + = nach oben
-    wrap.object3D.position.set(nudgeX, nudgeY, 0);
-
-    // Pfadcheck targets2
-    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => { hud.textContent += "\nTARGETS2: OK"; })
-      .catch(e => { hud.textContent += "\nTARGETS2: FAIL (" + e.message + ")"; });
+    const ref = document.getElementById("ref");
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
@@ -114,40 +111,51 @@
     });
 
     anchor.addEventListener("targetFound", () => {
+      ref.setAttribute("visible", "true");
       modelEnt.setAttribute("visible", "true");
       hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
     anchor.addEventListener("targetLost", () => {
+      ref.setAttribute("visible", "false");
       modelEnt.setAttribute("visible", "false");
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
+    // Wenn das Modell geladen ist, Material auf "immer sichtbar" stellen (hilft bei Z-fighting / Occlusion)
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // Auto-center: Mesh um Bounding-Box-Mitte verschieben
       const obj = modelEnt.getObject3D("mesh");
       if (!obj) {
-        hud.textContent += "\nCENTER: mesh missing";
+        hud.textContent += "\nGLB: mesh missing";
         return;
       }
 
-      obj.updateWorldMatrix(true, true);
+      obj.traverse((n) => {
+        if (n.isMesh && n.material) {
+          const mats = Array.isArray(n.material) ? n.material : [n.material];
+          mats.forEach((m) => {
+            m.depthTest = false;
+            m.depthWrite = false;
+            m.side = THREE.DoubleSide;
+            m.needsUpdate = true;
+          });
+        }
+      });
 
-      const box = new THREE.Box3().setFromObject(obj);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-
-      // Pivot-Korrektur: Mittelpunkt auf (0,0,0)
-      obj.position.sub(center);
-
-      hud.textContent += "\nCENTER: applied";
+      hud.textContent += "\nGLB: material tweaked";
     });
 
     modelEnt.addEventListener("model-error", () => {
       hud.textContent += "\nGLB: ERROR";
     });
+
+    // targets2 Check
+    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(() => { hud.textContent += "\nTARGETS2: OK"; })
+      .catch(e => { hud.textContent += "\nTARGETS2: FAIL (" + e.message + ")"; });
   </script>
 </body>
 </html>
