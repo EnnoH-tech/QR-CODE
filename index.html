@@ -42,15 +42,15 @@
   </style>
 
   <script>
-    // 1) Scale by distance with stronger "jumps" using a safe non-linear curve (power)
+    // 1) Scale: stärkerer Effekt, aber nicht "kaputt-extrem"
     AFRAME.registerComponent("scale-by-distance", {
       schema: {
-        target:   { type: "selector" },          // #anchor
+        target:   { type: "selector" },
         minScale: { type: "number", default: 2.0 }, // far
-        maxScale: { type: "number", default: 4.2 }, // near (moderate stronger)
-        minDist:  { type: "number", default: 0.35 }, // near
-        maxDist:  { type: "number", default: 1.60 }, // far
-        power:    { type: "number", default: 2.1 },  // >1 => stronger response (safe)
+        maxScale: { type: "number", default: 5.0 }, // near (deutlich stärker, aber safe)
+        minDist:  { type: "number", default: 0.35 },
+        maxDist:  { type: "number", default: 1.60 },
+        power:    { type: "number", default: 2.2 }, // macht "Sprünge" stärker ohne Chaos
         lerp:     { type: "number", default: 0.30 }
       },
 
@@ -71,14 +71,14 @@
 
         const dist = this.vCam.distanceTo(this.vTar);
 
-        // 0..1 (0 near, 1 far)
+        // normalize 0..1 (0 near, 1 far)
         let n = (dist - this.data.minDist) / (this.data.maxDist - this.data.minDist);
         n = THREE.MathUtils.clamp(n, 0, 1);
 
-        // invert => near=1, far=0
+        // invert so near => 1
         n = 1 - n;
 
-        // stronger feel (but stable)
+        // non-linear for stronger perceived jumps
         n = Math.pow(n, this.data.power);
 
         const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, n);
@@ -89,13 +89,13 @@
       }
     });
 
-    // 2) Perspective "flucht": add extra tilt when you view the target at an angle.
-    // IMPORTANT: we set rotation via A-Frame attribute in DEGREES (stable with your setup).
-    AFRAME.registerComponent("perspective-flucht", {
+    // 2) Perspective-Flucht: extra tilt basierend auf Blickwinkel
+    // WICHTIG: das kommt auf ein eigenes Rig (tiltRig), NICHT auf den Offset.
+    AFRAME.registerComponent("perspective-tilt", {
       schema: {
-        anchor:   { type: "selector" },           // #anchor
-        strength: { type: "number", default: 1.15 },// mild/safe exaggeration
-        maxDeg:   { type: "number", default: 16 },  // safe clamp
+        anchor:   { type: "selector" },             // #anchor
+        strength: { type: "number", default: 1.25 },// moderat, sicher
+        maxDeg:   { type: "number", default: 22 },  // moderat clamp
         lerp:     { type: "number", default: 0.30 }
       },
 
@@ -113,27 +113,23 @@
 
         cam.getWorldPosition(this.vCamW);
 
-        // camera position in anchor-local space
+        // camera position in anchor local space
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
-        // radians
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
-        // convert to degrees + exaggerate
-        let targetY = THREE.MathUtils.radToDeg(yaw)   * this.data.strength;
-        let targetX = THREE.MathUtils.radToDeg(-pitch)* this.data.strength;
+        let ty = THREE.MathUtils.radToDeg(yaw)   * this.data.strength;
+        let tx = THREE.MathUtils.radToDeg(-pitch)* this.data.strength;
 
-        // clamp
-        targetX = THREE.MathUtils.clamp(targetX, -this.data.maxDeg, this.data.maxDeg);
-        targetY = THREE.MathUtils.clamp(targetY, -this.data.maxDeg, this.data.maxDeg);
+        tx = THREE.MathUtils.clamp(tx, -this.data.maxDeg, this.data.maxDeg);
+        ty = THREE.MathUtils.clamp(ty, -this.data.maxDeg, this.data.maxDeg);
 
-        // smooth
-        this.curX = THREE.MathUtils.lerp(this.curX, targetX, this.data.lerp);
-        this.curY = THREE.MathUtils.lerp(this.curY, targetY, this.data.lerp);
+        this.curX = THREE.MathUtils.lerp(this.curX, tx, this.data.lerp);
+        this.curY = THREE.MathUtils.lerp(this.curY, ty, this.data.lerp);
 
-        // IMPORTANT: set attribute (degrees)
+        // set rotation via attribute (degrees) = stabil in A-Frame
         this.el.setAttribute("rotation", `${this.curX} ${this.curY} 0`);
       }
     });
@@ -170,31 +166,33 @@
         <a-entity id="surface" position="0 0 0.01">
           <a-entity id="offset" position="0 0 0">
 
-            <a-entity
-              id="modelEnt"
-              gltf-model="#model"
-              visible="false"
-              position="-1 0 0"
-              rotation="0 0 0"
-              scale="2.75 2.75 2.75"
+            <!-- HIER ist der Fix: Offset (-1) ist ein Parent -->
+            <a-entity id="placeRig" position="-1 0 0">
 
-              scale-by-distance="
-                target: #anchor;
-                minScale: 2.0;
-                maxScale: 4.2;
-                minDist: 0.35;
-                maxDist: 1.60;
-                power: 2.1;
-                lerp: 0.30
-              "
+              <!-- Tilt passiert NACH dem Offset, also schwen_togglelt nichts weg -->
+              <a-entity id="tiltRig" perspective-tilt="anchor:#anchor; strength:1.25; maxDeg:22; lerp:0.30">
 
-              perspective-flucht="
-                anchor: #anchor;
-                strength: 1.15;
-                maxDeg: 16;
-                lerp: 0.30
-              "
-            ></a-entity>
+                <!-- Modell bleibt bei 0 0 0 -->
+                <a-entity
+                  id="modelEnt"
+                  gltf-model="#model"
+                  visible="false"
+                  position="0 0 0"
+                  rotation="0 0 0"
+                  scale="2.75 2.75 2.75"
+                  scale-by-distance="
+                    target: #anchor;
+                    minScale: 2.0;
+                    maxScale: 5.0;
+                    minDist: 0.35;
+                    maxDist: 1.60;
+                    power: 2.2;
+                    lerp: 0.30
+                  "
+                ></a-entity>
+
+              </a-entity>
+            </a-entity>
 
           </a-entity>
         </a-entity>
@@ -251,9 +249,9 @@
     modelEnt.addEventListener("model-loaded", () => {
       log("GLB: LOADED");
 
-      // Safety: if extra tilt makes you view from behind, keep it visible
+      // wichtig: beim Kippen nicht von hinten verschwinden
       const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) return;
+      if (!mesh) { log("MESH: missing"); return; }
 
       mesh.traverse(o => {
         if (!o.isMesh || !o.material) return;
