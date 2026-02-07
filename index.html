@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (stable start + debug)</title>
+  <title>MindAR + GLB (sticker + auto-center + flatten)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -34,35 +34,19 @@
       user-select:none; -webkit-user-select:none;
       max-width: calc(100vw - 20px);
     }
-
-    #startOverlay{
-      position:fixed; inset:0;
-      display:grid; place-items:center;
-      background:rgba(0,0,0,0.85);
-      z-index:9998;
-    }
-    #startBtn{
-      padding:14px 18px;
-      border-radius:12px;
-      border:1px solid rgba(255,255,255,.35);
-      background:rgba(255,255,255,.12);
-      color:#fff;
-      font:16px -apple-system,system-ui,sans-serif;
-    }
   </style>
 </head>
 
 <body>
   <div id="app">
     <div id="hud">BOOT…</div>
-    <div id="startOverlay"><button id="startBtn">Start AR</button></div>
 
     <a-scene
       id="scene"
       embedded
       mindar-image="
         imageTargetSrc: /QR-CODE/targets.mind;
-        autoStart: false;
+        autoStart: true;
         uiLoading: true;
         uiScanning: true;
         filterMinCF: 0.001;
@@ -79,17 +63,19 @@
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-      <!-- Wenn dein targets.mind nur EIN Target hat: targetIndex 0 -->
+      <!-- Target 0 -->
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+        <!-- minimal vor die Fläche, damit kein Z-fighting -->
         <a-entity id="surface" position="0 0 0.01">
-          <a-entity id="offset" position="0.12 0 0">
+          <!-- Wrapper, damit wir sauber verschieben/rotieren können -->
+          <a-entity id="wrap" position="0 0 0" rotation="0 0 0">
             <a-entity
               id="modelEnt"
               gltf-model="#model"
               visible="false"
               position="0 0 0"
-              rotation="-90 0 0"
-              scale="0.75 0.75 0.75"
+              rotation="0 0 0"
+              scale="1 1 1"
             ></a-entity>
           </a-entity>
         </a-entity>
@@ -100,90 +86,85 @@
   </div>
 
   <script>
+    // iOS viewport fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
     window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
 
     const hud = document.getElementById("hud");
-    const startOverlay = document.getElementById("startOverlay");
-    const startBtn = document.getElementById("startBtn");
-
     const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
+    const wrap = document.getElementById("wrap");
     const modelEnt = document.getElementById("modelEnt");
 
-    function log(lines){ hud.textContent = lines.join("\n"); }
+    // ---------- TUNE ----------
+    // Größe der Worte auf der Targetfläche
+    const scaleXY = 0.75;
+
+    // "Aufgedruckt": Tiefe stark reduzieren (kleiner = flacher)
+    const scaleZ  = 0.03;
+
+    // Feintuning, falls du nach dem Auto-Zentrieren noch minimal verschieben willst
+    // (positiv X = nach rechts, positiv Y = nach oben)
+    const nudgeX = 0.00;
+    const nudgeY = 0.00;
+
+    // Falls es spiegelverkehrt oder falsch herum ist, hier testen:
+    // 0 oder 180 sind die typischen Werte.
+    const rotY = 0;
+    // --------------------------
 
     scene.addEventListener("loaded", () => {
-      log([
-        "SCENE: loaded",
-        "AR: waiting for Start",
-        "TIP: if no target → check targets.mind path"
-      ]);
+      hud.textContent = "SCENE: loaded\nTARGET: scanning…";
       try {
         const r = scene.renderer;
         if (r && r.setClearColor) r.setClearColor(0x000000, 0);
       } catch {}
     });
 
-    // MindAR system events (super wichtig)
-    scene.addEventListener("arReady", () => {
-      log(["AR: READY", "TARGET: scanning…"]);
-    });
-
-    scene.addEventListener("arError", (e) => {
-      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
-      log(["AR: ERROR", msg]);
-    });
-
     anchor.addEventListener("targetFound", () => {
       modelEnt.setAttribute("visible", "true");
-      log(["TARGET: FOUND", "MODEL: visible"]);
+      hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
     anchor.addEventListener("targetLost", () => {
       modelEnt.setAttribute("visible", "false");
-      log(["TARGET: LOST", "MODEL: hidden"]);
+      hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
+
+      // 1) Basis-Transform: flach + scale
+      modelEnt.object3D.rotation.set(0, THREE.MathUtils.degToRad(rotY), 0);
+      modelEnt.object3D.scale.set(scaleXY, scaleXY, scaleZ);
+
+      // 2) Auto-Zentrieren: Pivot auf Bounding-Box-Mitte setzen
+      //    Dadurch guckst du nicht mehr "am E", sondern tendenziell in die Mitte des gesamten Wortblocks.
+      const obj = modelEnt.getObject3D("mesh");
+      if (obj) {
+        obj.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(obj);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // verschiebe Mesh so, dass sein Mittelpunkt bei (0,0,0) liegt
+        obj.position.sub(center);
+
+        // optional: feines Nudge (zwischen den Wörtern exakt mittig)
+        wrap.object3D.position.set(nudgeX, nudgeY, 0);
+
+        // Hinweis im HUD
+        hud.textContent += "\nCENTER: applied";
+      } else {
+        hud.textContent += "\nCENTER: mesh missing";
+      }
     });
 
     modelEnt.addEventListener("model-error", () => {
       hud.textContent += "\nGLB: ERROR";
     });
-
-    startBtn.addEventListener("click", async () => {
-      startOverlay.remove();
-
-      // Start MindAR explicitly (iOS-safe)
-      const arSystem = scene.systems["mindar-image-system"];
-      if (!arSystem) {
-        log(["AR: ERROR", "mindar-image-system missing"]);
-        return;
-      }
-
-      log(["AR: starting…"]);
-
-      try {
-        await arSystem.start();
-        // arReady event should follow
-      } catch (err) {
-        log(["AR: start failed", String(err && err.message ? err.message : err)]);
-      }
-    });
-
-    // Extra: harte Kontrolle, ob targets.mind überhaupt erreichbar ist
-    // (zeigt dir sofort, ob der Pfad stimmt oder 404 ist)
-    fetch("/QR-CODE/targets.mind", { cache: "no-store" })
-      .then(r => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.arrayBuffer();
-      })
-      .then(() => { hud.textContent += "\nTARGETS: OK"; })
-      .catch(e => { hud.textContent += "\nTARGETS: FAIL (" + e.message + ")"; });
   </script>
 </body>
 </html>
