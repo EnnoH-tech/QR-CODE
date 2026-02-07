@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind)</title>
+  <title>MindAR + GLB (targets2.mind) + Scale-by-Distance</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -40,6 +40,49 @@
       max-width: calc(100vw - 20px);
     }
   </style>
+
+  <script>
+    // Scales an entity based on camera <-> target distance, with smoothing (lerp).
+    AFRAME.registerComponent("scale-by-distance", {
+      schema: {
+        target:   { type: "selector" }, // e.g. #anchor
+        minScale: { type: "number", default: 2.0 }, // far
+        maxScale: { type: "number", default: 3.5 }, // near
+        minDist:  { type: "number", default: 0.35 }, // near distance
+        maxDist:  { type: "number", default: 1.60 }, // far distance
+        lerp:     { type: "number", default: 0.30 }  // smoothing (requested)
+      },
+
+      init() {
+        this.vCam = new THREE.Vector3();
+        this.vTar = new THREE.Vector3();
+        this.vGoal = new THREE.Vector3(1, 1, 1);
+        this.vCur  = new THREE.Vector3(1, 1, 1);
+      },
+
+      tick() {
+        const t = this.data.target;
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        if (!t || !cam) return;
+
+        cam.getWorldPosition(this.vCam);
+        t.object3D.getWorldPosition(this.vTar);
+
+        const dist = this.vCam.distanceTo(this.vTar);
+
+        // clamp distance into [minDist, maxDist]
+        const d = THREE.MathUtils.clamp(dist, this.data.minDist, this.data.maxDist);
+
+        // map distance -> scale (invert so near => bigger)
+        const u = 1 - (d - this.data.minDist) / (this.data.maxDist - this.data.minDist);
+        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, u);
+
+        this.vGoal.set(s, s, s);
+        this.vCur.lerp(this.vGoal, this.data.lerp);
+        this.el.object3D.scale.copy(this.vCur);
+      }
+    });
+  </script>
 </head>
 
 <body>
@@ -72,15 +115,23 @@
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
         <!-- minimal vor die Fläche, damit kein Flimmern -->
         <a-entity id="surface" position="0 0 0.01">
-          <!-- optionaler Offset: schiebt den Inhalt nach rechts/links -->
+          <!-- optionaler Offset -->
           <a-entity id="offset" position="0 0 0">
             <a-entity
               id="modelEnt"
               gltf-model="#model"
               visible="false"
               position="-5 0 0"
-              rotation="00 0 0"
+              rotation="0 0 0"
               scale="2.75 2.75 2.75"
+              scale-by-distance="
+                target: #anchor;
+                minScale: 2.0;
+                maxScale: 3.5;
+                minDist: 0.35;
+                maxDist: 1.60;
+                lerp: 0.30
+              "
             ></a-entity>
           </a-entity>
         </a-entity>
@@ -137,6 +188,4 @@
     modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
   </script>
 </body>
-</html> 
-
-
+</html>
