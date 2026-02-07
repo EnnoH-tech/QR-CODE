@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Scale-by-Distance</title>
+  <title>MindAR + GLB (targets2.mind) + Perspective Tilt</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,44 +42,51 @@
   </style>
 
   <script>
-    // Scales an entity based on camera <-> target distance, with smoothing (lerp).
-    AFRAME.registerComponent("scale-by-distance", {
+    /**
+     * perspective-tilt
+     * Adds an extra (exaggerated) tilt based on where the camera is relative to the anchor.
+     * Effect: when you look at the target from an angle, the content tilts more => stronger perspective taper.
+     */
+    AFRAME.registerComponent("perspective-tilt", {
       schema: {
-        target:   { type: "selector" }, // e.g. #anchor
-        minScale: { type: "number", default: 2.0 }, // far
-        maxScale: { type: "number", default: 3.5 }, // near
-        minDist:  { type: "number", default: 0.35 }, // near distance
-        maxDist:  { type: "number", default: 1.60 }, // far distance
-        lerp:     { type: "number", default: 0.30 }  // smoothing (requested)
+        anchor:   { type: "selector" },           // #anchor
+        strength: { type: "number", default: 1.8 },// >1 = stronger than real
+        maxDeg:   { type: "number", default: 35 }, // clamp
+        lerp:     { type: "number", default: 0.30 }// smoothing (requested)
       },
 
       init() {
-        this.vCam = new THREE.Vector3();
-        this.vTar = new THREE.Vector3();
-        this.vGoal = new THREE.Vector3(1, 1, 1);
-        this.vCur  = new THREE.Vector3(1, 1, 1);
+        this.vCamW = new THREE.Vector3();
+        this.vCamL = new THREE.Vector3();
       },
 
       tick() {
-        const t = this.data.target;
+        const anchorEl = this.data.anchor;
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        if (!t || !cam) return;
+        if (!anchorEl || !cam) return;
 
-        cam.getWorldPosition(this.vCam);
-        t.object3D.getWorldPosition(this.vTar);
+        // camera position in WORLD
+        cam.getWorldPosition(this.vCamW);
 
-        const dist = this.vCam.distanceTo(this.vTar);
+        // convert camera position into ANCHOR LOCAL space
+        this.vCamL.copy(this.vCamW);
+        anchorEl.object3D.worldToLocal(this.vCamL);
 
-        // clamp distance into [minDist, maxDist]
-        const d = THREE.MathUtils.clamp(dist, this.data.minDist, this.data.maxDist);
+        // Yaw (left/right) and Pitch (up/down) relative to target normal.
+        // MindAR anchor typically faces -Z outward. We use -z to keep signs intuitive.
+        const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
+        const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
-        // map distance -> scale (invert so near => bigger)
-        const u = 1 - (d - this.data.minDist) / (this.data.maxDist - this.data.minDist);
-        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, u);
+        const max = THREE.MathUtils.degToRad(this.data.maxDeg);
 
-        this.vGoal.set(s, s, s);
-        this.vCur.lerp(this.vGoal, this.data.lerp);
-        this.el.object3D.scale.copy(this.vCur);
+        // exaggerate + clamp
+        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,   -max, max);
+        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength, -max, max);
+
+        // smooth apply
+        const rot = this.el.object3D.rotation;
+        rot.x = THREE.MathUtils.lerp(rot.x, rx, this.data.lerp);
+        rot.y = THREE.MathUtils.lerp(rot.y, ry, this.data.lerp);
       }
     });
   </script>
@@ -117,22 +124,22 @@
         <a-entity id="surface" position="0 0 0.01">
           <!-- optionaler Offset -->
           <a-entity id="offset" position="0 0 0">
+
+            <!-- This rig receives the exaggerated tilt -->
             <a-entity
-              id="modelEnt"
-              gltf-model="#model"
-              visible="false"
-              position="-5 0 0"
-              rotation="0 0 0"
-              scale="2.75 2.75 2.75"
-              scale-by-distance="
-                target: #anchor;
-                minScale: 2.0;
-                maxScale: 3.5;
-                minDist: 0.35;
-                maxDist: 1.60;
-                lerp: 0.30
-              "
-            ></a-entity>
+              id="tiltRig"
+              perspective-tilt="anchor:#anchor; strength:1.8; maxDeg:35; lerp:0.3"
+            >
+              <a-entity
+                id="modelEnt"
+                gltf-model="#model"
+                visible="false"
+                position="-5 0 0"
+                rotation="0 0 0"
+                scale="2.75 2.75 2.75"
+              ></a-entity>
+            </a-entity>
+
           </a-entity>
         </a-entity>
       </a-entity>
