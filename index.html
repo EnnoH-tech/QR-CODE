@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (sticker on target)</title>
+  <title>MindAR + GLB (stable start + debug)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -12,11 +12,13 @@
     html, body { margin:0; padding:0; background:#000; overflow:hidden; width:100%; height:100%; }
     :root { --vh: 1vh; }
     #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
+
     a-scene{ position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; background:transparent !important; }
     .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
       position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
       object-fit:cover !important; background:transparent !important;
     }
+
     #hud{
       position:fixed;
       top: env(safe-area-inset-top, 0px);
@@ -30,6 +32,22 @@
       white-space:pre-line;
       z-index:9999;
       user-select:none; -webkit-user-select:none;
+      max-width: calc(100vw - 20px);
+    }
+
+    #startOverlay{
+      position:fixed; inset:0;
+      display:grid; place-items:center;
+      background:rgba(0,0,0,0.85);
+      z-index:9998;
+    }
+    #startBtn{
+      padding:14px 18px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.35);
+      background:rgba(255,255,255,.12);
+      color:#fff;
+      font:16px -apple-system,system-ui,sans-serif;
     }
   </style>
 </head>
@@ -37,11 +55,14 @@
 <body>
   <div id="app">
     <div id="hud">BOOT…</div>
+    <div id="startOverlay"><button id="startBtn">Start AR</button></div>
 
     <a-scene
+      id="scene"
+      embedded
       mindar-image="
         imageTargetSrc: /QR-CODE/targets.mind;
-        autoStart: true;
+        autoStart: false;
         uiLoading: true;
         uiScanning: true;
         filterMinCF: 0.001;
@@ -58,14 +79,10 @@
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
+      <!-- Wenn dein targets.mind nur EIN Target hat: targetIndex 0 -->
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <!-- Ebene minimal nach vorne, damit es "auf" der Fläche klebt -->
         <a-entity id="surface" position="0 0 0.01">
-
-          <!-- TUNE: Offset für Blickpunkt zwischen den Wörtern -->
           <a-entity id="offset" position="0.12 0 0">
-
-            <!-- Dein GLB ist "stehend" gebaut -> hier flach auf die Fläche drehen -->
             <a-entity
               id="modelEnt"
               gltf-model="#model"
@@ -74,7 +91,6 @@
               rotation="-90 0 0"
               scale="0.75 0.75 0.75"
             ></a-entity>
-
           </a-entity>
         </a-entity>
       </a-entity>
@@ -90,30 +106,84 @@
     window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
 
     const hud = document.getElementById("hud");
-    const scene = document.querySelector("a-scene");
+    const startOverlay = document.getElementById("startOverlay");
+    const startBtn = document.getElementById("startBtn");
+
+    const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
 
+    function log(lines){ hud.textContent = lines.join("\n"); }
+
     scene.addEventListener("loaded", () => {
-      hud.textContent = "SCENE: loaded\nTARGET: scanning…";
+      log([
+        "SCENE: loaded",
+        "AR: waiting for Start",
+        "TIP: if no target → check targets.mind path"
+      ]);
       try {
         const r = scene.renderer;
         if (r && r.setClearColor) r.setClearColor(0x000000, 0);
       } catch {}
     });
 
+    // MindAR system events (super wichtig)
+    scene.addEventListener("arReady", () => {
+      log(["AR: READY", "TARGET: scanning…"]);
+    });
+
+    scene.addEventListener("arError", (e) => {
+      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
+      log(["AR: ERROR", msg]);
+    });
+
     anchor.addEventListener("targetFound", () => {
       modelEnt.setAttribute("visible", "true");
-      hud.textContent = "TARGET: FOUND\nMODEL: visible";
+      log(["TARGET: FOUND", "MODEL: visible"]);
     });
 
     anchor.addEventListener("targetLost", () => {
       modelEnt.setAttribute("visible", "false");
-      hud.textContent = "TARGET: LOST\nMODEL: hidden";
+      log(["TARGET: LOST", "MODEL: hidden"]);
     });
 
-    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
-    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
+    modelEnt.addEventListener("model-loaded", () => {
+      hud.textContent += "\nGLB: LOADED";
+    });
+
+    modelEnt.addEventListener("model-error", () => {
+      hud.textContent += "\nGLB: ERROR";
+    });
+
+    startBtn.addEventListener("click", async () => {
+      startOverlay.remove();
+
+      // Start MindAR explicitly (iOS-safe)
+      const arSystem = scene.systems["mindar-image-system"];
+      if (!arSystem) {
+        log(["AR: ERROR", "mindar-image-system missing"]);
+        return;
+      }
+
+      log(["AR: starting…"]);
+
+      try {
+        await arSystem.start();
+        // arReady event should follow
+      } catch (err) {
+        log(["AR: start failed", String(err && err.message ? err.message : err)]);
+      }
+    });
+
+    // Extra: harte Kontrolle, ob targets.mind überhaupt erreichbar ist
+    // (zeigt dir sofort, ob der Pfad stimmt oder 404 ist)
+    fetch("/QR-CODE/targets.mind", { cache: "no-store" })
+      .then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.arrayBuffer();
+      })
+      .then(() => { hud.textContent += "\nTARGETS: OK"; })
+      .catch(e => { hud.textContent += "\nTARGETS: FAIL (" + e.message + ")"; });
   </script>
 </body>
 </html>
