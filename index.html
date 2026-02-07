@@ -126,3 +126,163 @@
       sceneEl = wrap.querySelector("a-scene");
       modelEnt = sceneEl.querySelector("#modelEnt");
       camEl = sceneEl.querySelector("#cam");
+
+      // Force transparent clear color (this kills the black overlay issue)
+      sceneEl.addEventListener("loaded", () => {
+        try {
+          const r = sceneEl.renderer;
+          if (r && r.setClearColor) r.setClearColor(0x000000, 0);
+        } catch {}
+      });
+
+      modelEnt.addEventListener("model-loaded", () => {
+        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("GLB:"));
+        lines.push("GLB: LOADED");
+        hud.textContent = lines.join("\n");
+      });
+      modelEnt.addEventListener("model-error", () => {
+        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("GLB:"));
+        lines.push("GLB: ERROR");
+        hud.textContent = lines.join("\n");
+      });
+    }
+
+    function videoToScreenMapper() {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const sw = window.innerWidth, sh = window.innerHeight;
+      const scale = Math.max(sw / vw, sh / vh);
+      const dispW = vw * scale;
+      const dispH = vh * scale;
+      const offX = (sw - dispW) / 2;
+      const offY = (sh - dispH) / 2;
+      return (x, y) => ({ x: x * scale + offX, y: y * scale + offY });
+    }
+
+    function approxQuadFromPoints(points) {
+      let minX=1e9, minY=1e9, maxX=-1e9, maxY=-1e9;
+      for (const p of points) {
+        minX = Math.min(minX, p.getX());
+        minY = Math.min(minY, p.getY());
+        maxX = Math.max(maxX, p.getX());
+        maxY = Math.max(maxY, p.getY());
+      }
+      const size = Math.max(maxX - minX, maxY - minY);
+      const pad = 0.18 * size;
+      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+      return { tl:{x:minX,y:minY}, tr:{x:maxX,y:minY}, bl:{x:minX,y:maxY} };
+    }
+
+    function screenToWorld(xPx, yPx, z) {
+      const camObj = camEl.getObject3D("camera");
+      if (!camObj) return { x:0, y:0, z };
+      const fov = (camObj.fov || 80) * Math.PI / 180;
+      const aspect = window.innerWidth / window.innerHeight;
+      const ndcX = (xPx / window.innerWidth) * 2 - 1;
+      const ndcY = 1 - (yPx / window.innerHeight) * 2;
+      const halfH = Math.tan(fov / 2) * (-z);
+      const halfW = halfH * aspect;
+      return { x: ndcX * halfW, y: ndcY * halfH, z };
+    }
+
+    function showModel(){ modelEnt.setAttribute("visible","true"); }
+    function hideModel(){ modelEnt.setAttribute("visible","false"); }
+
+    function updateModel(centerScreen, sizePx, yawDeg) {
+      const targetZ = -2.0;
+      const p = screenToWorld(centerScreen.x, centerScreen.y, targetZ);
+      const targetS = Math.max(0.25, Math.min(4.5, sizePx / 260));
+
+      const t = 0.22;
+      smooth.x = lerp(smooth.x, p.x, t);
+      smooth.y = lerp(smooth.y, p.y, t);
+      smooth.z = lerp(smooth.z, targetZ, t);
+      smooth.s = lerp(smooth.s, targetS, t);
+      smooth.yaw = lerp(smooth.yaw, yawDeg, 0.18);
+
+      modelEnt.setAttribute("position", `${smooth.x} ${smooth.y} ${smooth.z}`);
+      modelEnt.setAttribute("scale", `${smooth.s} ${smooth.s} ${smooth.s}`);
+      modelEnt.setAttribute("rotation", `0 ${smooth.yaw} 0`);
+    }
+
+    function startDecoding() {
+      reader.decodeFromVideoElementContinuously(video, (result) => {
+        const now = performance.now();
+
+        // hide after 2s without detections
+        if (now - lastFoundAt > 2000 && modelEnt) {
+          hideModel();
+          setHUD([
+            "CAMERA: OK",
+            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
+            "QR: scanning…",
+            "MODEL: hidden"
+          ]);
+        }
+
+        if (!result || !modelEnt) return;
+
+        lastFoundAt = now;
+
+        const text = result.getText ? (result.getText() || "") : "";
+        if (text) lastText = text;
+
+        // Always show on any QR decode
+        showModel();
+
+        // If points exist, move model; otherwise keep last pose
+        const pts = result.getResultPoints ? (result.getResultPoints() || []) : [];
+        if (pts && pts.length >= 3) {
+          const map = videoToScreenMapper();
+          const q = approxQuadFromPoints(pts);
+
+          const tl = map(q.tl.x, q.tl.y);
+          const tr = map(q.tr.x, q.tr.y);
+          const bl = map(q.bl.x, q.bl.y);
+
+          const center = { x:(tl.x + tr.x + bl.x)/3, y:(tl.y + tr.y + bl.y)/3 };
+          const w = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+          const h = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+          const size = Math.max(w, h);
+          const yaw = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+
+          updateModel(center, size, yaw);
+
+          setHUD([
+            "CAMERA: OK",
+            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
+            "QR: FOUND (with points)",
+            "TEXT: " + (lastText.length > 70 ? lastText.slice(0,70) + "…" : lastText),
+            "MODEL: visible"
+          ]);
+        } else {
+          setHUD([
+            "CAMERA: OK",
+            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
+            "QR: FOUND (no points)",
+            "TEXT: " + (lastText.length > 70 ? lastText.slice(0,70) + "…" : lastText),
+            "MODEL: visible"
+          ]);
+        }
+      });
+    }
+
+    btn.addEventListener("click", async () => {
+      start.remove();
+      setHUD(["CAMERA: starting…"]);
+
+      await startCamera();
+      await waitVideoDims();
+
+      setHUD([
+        "CAMERA: OK",
+        `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
+        "QR: scanning…",
+        "MODEL: (mounting 3D)"
+      ]);
+
+      mountAFrame();      // <- important: mount AFTER camera is visible
+      startDecoding();
+    });
+  </script>
+</body>
+</html>
