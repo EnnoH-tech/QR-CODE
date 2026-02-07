@@ -1,288 +1,65 @@
 <!doctype html>
-<html lang="de">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QR → GLB Overlay (Web, transparent fix)</title>
-
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZXing QR Test (Canvas)</title>
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
-
   <style>
-    html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:-apple-system,system-ui,sans-serif; }
-
-    #start { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.85); color:#fff; z-index:10; }
-    #btn { padding:14px 18px; border-radius:12px; border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12); }
-
-    #hud {
-      position:fixed; top:10px; left:10px; padding:8px 10px;
-      background:rgba(0,0,0,.65); color:#fff; font-size:13px;
-      border-radius:6px; white-space:pre-line; z-index:20;
-      user-select:none; -webkit-user-select:none; max-width:calc(100vw - 20px);
-    }
-
-    #video {
-      position:fixed; inset:0; width:100vw; height:100vh;
-      object-fit:cover; background:#000; z-index:0;
-    }
-
-    /* A-Frame overlay */
-    #aframeWrap { position:fixed; inset:0; z-index:1; pointer-events:none; }
-    #aframeWrap canvas { background: transparent !important; }
-    a-scene { background: transparent !important; }
+    body { margin:0; background:#000; color:#fff; font-family:-apple-system,system-ui; }
+    #hud { position:fixed; top:10px; left:10px; background:rgba(0,0,0,.6); padding:8px; }
+    video { width:100vw; height:100vh; object-fit:cover; }
+    canvas { display:none; }
   </style>
 </head>
-
 <body>
-  <div id="start"><div id="btn">Start Kamera</div></div>
-  <div id="hud">WAITING FOR TAP</div>
 
-  <video id="video" playsinline webkit-playsinline muted></video>
+<div id="hud">starting…</div>
+<video id="video" playsinline webkit-playsinline muted></video>
+<canvas id="c"></canvas>
 
-  <div id="aframeWrap"></div>
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d", { willReadFrequently:true });
+const hud = document.getElementById("hud");
+const reader = new ZXing.BrowserQRCodeReader();
 
-  <script>
-    const hud = document.getElementById("hud");
-    const start = document.getElementById("start");
-    const btn = document.getElementById("btn");
-    const video = document.getElementById("video");
-    const wrap = document.getElementById("aframeWrap");
+async function start() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode:{ ideal:"environment" } },
+    audio:false
+  });
+  video.srcObject = stream;
+  await video.play();
+  hud.textContent = "CAMERA OK – scanning…";
+  scan();
+}
 
-    const reader = new ZXing.BrowserMultiFormatReader();
+function scan() {
+  if (video.readyState < 2) {
+    requestAnimationFrame(scan);
+    return;
+  }
 
-    let sceneEl = null;
-    let modelEnt = null;
-    let camEl = null;
+  // Downscale → ZXing mag das
+  const w = 640;
+  const h = Math.round(video.videoHeight / video.videoWidth * w);
+  canvas.width = w;
+  canvas.height = h;
+  ctx.drawImage(video, 0, 0, w, h);
 
-    let lastFoundAt = 0;
-    let lastText = "";
+  try {
+    const result = reader.decodeFromCanvas(canvas);
+    hud.textContent = "QR FOUND:\n" + result.getText();
+  } catch (e) {
+    hud.textContent = "scanning…";
+  }
 
-    // simple smoothing
-    let smooth = { x:0, y:0, z:-2, s:1, yaw:0 };
-    const lerp = (a,b,t) => a + (b-a)*t;
+  requestAnimationFrame(scan);
+}
 
-    function setHUD(lines){ hud.textContent = lines.join("\n"); }
-
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio:false,
-          video:{
-            facingMode:{ ideal:"environment" },
-            width:{ ideal:1280 },
-            height:{ ideal:720 }
-          }
-        });
-        video.srcObject = stream;
-        video.muted = true;
-        video.setAttribute("playsinline","");
-        video.setAttribute("webkit-playsinline","");
-        await video.play();
-      } catch (e) {
-        setHUD(["CAMERA: ERROR", String(e && e.message ? e.message : e)]);
-        throw e;
-      }
-    }
-
-    function waitVideoDims() {
-      return new Promise(res => {
-        const t = setInterval(() => {
-          if (video.videoWidth && video.videoHeight) { clearInterval(t); res(); }
-        }, 50);
-      });
-    }
-
-    function mountAFrame() {
-      // Build scene only once
-      if (sceneEl) return;
-
-      wrap.innerHTML = `
-        <a-scene
-          embedded
-          vr-mode-ui="enabled:false"
-          renderer="alpha:true; antialias:true; colorManagement:true"
-          background="transparent:true"
-        >
-          <a-assets>
-            <a-asset-item id="model" src="/QR-CODE/enno6_test.glb?v=1"></a-asset-item>
-          </a-assets>
-
-          <a-entity light="type: ambient; intensity: 1.2"></a-entity>
-          <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-          <a-entity
-            id="modelEnt"
-            gltf-model="#model"
-            visible="false"
-            position="0 0 -2"
-            rotation="0 0 0"
-            scale="1 1 1"
-          ></a-entity>
-
-          <a-entity id="cam" camera position="0 0 0"></a-entity>
-        </a-scene>
-      `;
-
-      sceneEl = wrap.querySelector("a-scene");
-      modelEnt = sceneEl.querySelector("#modelEnt");
-      camEl = sceneEl.querySelector("#cam");
-
-      // Force transparent clear color (this kills the black overlay issue)
-      sceneEl.addEventListener("loaded", () => {
-        try {
-          const r = sceneEl.renderer;
-          if (r && r.setClearColor) r.setClearColor(0x000000, 0);
-        } catch {}
-      });
-
-      modelEnt.addEventListener("model-loaded", () => {
-        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("GLB:"));
-        lines.push("GLB: LOADED");
-        hud.textContent = lines.join("\n");
-      });
-      modelEnt.addEventListener("model-error", () => {
-        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("GLB:"));
-        lines.push("GLB: ERROR");
-        hud.textContent = lines.join("\n");
-      });
-    }
-
-    function videoToScreenMapper() {
-      const vw = video.videoWidth, vh = video.videoHeight;
-      const sw = window.innerWidth, sh = window.innerHeight;
-      const scale = Math.max(sw / vw, sh / vh);
-      const dispW = vw * scale;
-      const dispH = vh * scale;
-      const offX = (sw - dispW) / 2;
-      const offY = (sh - dispH) / 2;
-      return (x, y) => ({ x: x * scale + offX, y: y * scale + offY });
-    }
-
-    function approxQuadFromPoints(points) {
-      let minX=1e9, minY=1e9, maxX=-1e9, maxY=-1e9;
-      for (const p of points) {
-        minX = Math.min(minX, p.getX());
-        minY = Math.min(minY, p.getY());
-        maxX = Math.max(maxX, p.getX());
-        maxY = Math.max(maxY, p.getY());
-      }
-      const size = Math.max(maxX - minX, maxY - minY);
-      const pad = 0.18 * size;
-      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
-      return { tl:{x:minX,y:minY}, tr:{x:maxX,y:minY}, bl:{x:minX,y:maxY} };
-    }
-
-    function screenToWorld(xPx, yPx, z) {
-      const camObj = camEl.getObject3D("camera");
-      if (!camObj) return { x:0, y:0, z };
-      const fov = (camObj.fov || 80) * Math.PI / 180;
-      const aspect = window.innerWidth / window.innerHeight;
-      const ndcX = (xPx / window.innerWidth) * 2 - 1;
-      const ndcY = 1 - (yPx / window.innerHeight) * 2;
-      const halfH = Math.tan(fov / 2) * (-z);
-      const halfW = halfH * aspect;
-      return { x: ndcX * halfW, y: ndcY * halfH, z };
-    }
-
-    function showModel(){ modelEnt.setAttribute("visible","true"); }
-    function hideModel(){ modelEnt.setAttribute("visible","false"); }
-
-    function updateModel(centerScreen, sizePx, yawDeg) {
-      const targetZ = -2.0;
-      const p = screenToWorld(centerScreen.x, centerScreen.y, targetZ);
-      const targetS = Math.max(0.25, Math.min(4.5, sizePx / 260));
-
-      const t = 0.22;
-      smooth.x = lerp(smooth.x, p.x, t);
-      smooth.y = lerp(smooth.y, p.y, t);
-      smooth.z = lerp(smooth.z, targetZ, t);
-      smooth.s = lerp(smooth.s, targetS, t);
-      smooth.yaw = lerp(smooth.yaw, yawDeg, 0.18);
-
-      modelEnt.setAttribute("position", `${smooth.x} ${smooth.y} ${smooth.z}`);
-      modelEnt.setAttribute("scale", `${smooth.s} ${smooth.s} ${smooth.s}`);
-      modelEnt.setAttribute("rotation", `0 ${smooth.yaw} 0`);
-    }
-
-    function startDecoding() {
-      reader.decodeFromVideoElementContinuously(video, (result) => {
-        const now = performance.now();
-
-        // hide after 2s without detections
-        if (now - lastFoundAt > 2000 && modelEnt) {
-          hideModel();
-          setHUD([
-            "CAMERA: OK",
-            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
-            "QR: scanning…",
-            "MODEL: hidden"
-          ]);
-        }
-
-        if (!result || !modelEnt) return;
-
-        lastFoundAt = now;
-
-        const text = result.getText ? (result.getText() || "") : "";
-        if (text) lastText = text;
-
-        // Always show on any QR decode
-        showModel();
-
-        // If points exist, move model; otherwise keep last pose
-        const pts = result.getResultPoints ? (result.getResultPoints() || []) : [];
-        if (pts && pts.length >= 3) {
-          const map = videoToScreenMapper();
-          const q = approxQuadFromPoints(pts);
-
-          const tl = map(q.tl.x, q.tl.y);
-          const tr = map(q.tr.x, q.tr.y);
-          const bl = map(q.bl.x, q.bl.y);
-
-          const center = { x:(tl.x + tr.x + bl.x)/3, y:(tl.y + tr.y + bl.y)/3 };
-          const w = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-          const h = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-          const size = Math.max(w, h);
-          const yaw = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
-
-          updateModel(center, size, yaw);
-
-          setHUD([
-            "CAMERA: OK",
-            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
-            "QR: FOUND (with points)",
-            "TEXT: " + (lastText.length > 70 ? lastText.slice(0,70) + "…" : lastText),
-            "MODEL: visible"
-          ]);
-        } else {
-          setHUD([
-            "CAMERA: OK",
-            `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
-            "QR: FOUND (no points)",
-            "TEXT: " + (lastText.length > 70 ? lastText.slice(0,70) + "…" : lastText),
-            "MODEL: visible"
-          ]);
-        }
-      });
-    }
-
-    btn.addEventListener("click", async () => {
-      start.remove();
-      setHUD(["CAMERA: starting…"]);
-
-      await startCamera();
-      await waitVideoDims();
-
-      setHUD([
-        "CAMERA: OK",
-        `VIDEO: ${video.videoWidth}x${video.videoHeight}`,
-        "QR: scanning…",
-        "MODEL: (mounting 3D)"
-      ]);
-
-      mountAFrame();      // <- important: mount AFTER camera is visible
-      startDecoding();
-    });
-  </script>
+start();
+</script>
 </body>
 </html>
