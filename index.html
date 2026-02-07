@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2 anchor only)</title>
+  <title>MindAR + GLB (camera visible, less “transparent” edges)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -12,11 +12,19 @@
     html, body { margin:0; padding:0; background:#000; overflow:hidden; width:100%; height:100%; }
     :root { --vh: 1vh; }
     #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
-    a-scene{ position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; background:transparent !important; }
+
+    a-scene{
+      position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
+      background:transparent !important;
+    }
+
+    /* Keep camera visible: video stays behind WebGL canvas */
     .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
       position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
-      object-fit:cover !important; background:transparent !important;
+      object-fit:cover !important;
+      background:transparent !important;
     }
+
     #hud{
       position:fixed;
       top: env(safe-area-inset-top, 0px);
@@ -30,21 +38,23 @@
       white-space:pre-line;
       z-index:9999;
       user-select:none; -webkit-user-select:none;
-      max-width: calc(100vw - 20px);
     }
   </style>
 
   <script>
-    // Smooth-follow: follows ONLY pose (pos+rot). Scale stays fixed.
-    AFRAME.registerComponent('smooth-follow-pose', {
+    // Smooth-follow component: lerpt position + quaternion + scale
+    AFRAME.registerComponent('smooth-follow', {
       schema: {
         target: { type: 'selector' },
-        posLerp: { type: 'number', default: 0.14 },
-        rotLerp: { type: 'number', default: 0.10 }
+        posLerp: { type: 'number', default: 0.18 },
+        rotLerp: { type: 'number', default: 0.12 },
+        sclLerp: { type: 'number', default: 0.18 }
       },
       init() {
-        this.tp = new THREE.Vector3();
-        this.tq = new THREE.Quaternion();
+        this.v3 = new THREE.Vector3();
+        this.v3b = new THREE.Vector3();
+        this.q = new THREE.Quaternion();
+        this.qb = new THREE.Quaternion();
       },
       tick() {
         const t = this.data.target;
@@ -53,12 +63,22 @@
         const a = this.el.object3D;
         const b = t.object3D;
 
-        b.getWorldPosition(this.tp);
-        a.parent.worldToLocal(this.tp);
-        a.position.lerp(this.tp, this.data.posLerp);
+        // position
+        b.getWorldPosition(this.v3b);
+        a.getWorldPosition(this.v3);
+        this.v3.lerp(this.v3b, this.data.posLerp);
+        a.parent.worldToLocal(this.v3);
+        a.position.copy(this.v3);
 
-        b.getWorldQuaternion(this.tq);
-        a.quaternion.slerp(this.tq, this.data.rotLerp);
+        // rotation
+        b.getWorldQuaternion(this.qb);
+        a.getWorldQuaternion(this.q);
+        this.q.slerp(this.qb, this.data.rotLerp);
+        a.quaternion.copy(this.q);
+
+        // scale (optional)
+        b.getWorldScale(this.v3b);
+        a.scale.lerp(this.v3b, this.data.sclLerp);
       }
     });
   </script>
@@ -79,7 +99,14 @@
         filterMinCF: 0.0005;
         filterBeta: 0.02;
       "
-      renderer="colorManagement:true; antialias:true; alpha:true"
+
+      <!--
+        Camera must stay visible => alpha:true.
+        The “milky/transparent” look on thin text often comes from premultipliedAlpha.
+        premultipliedAlpha:false usually fixes that blending on top of the camera video.
+        If you still see “see-through” edges, set antialias:false (next line).
+      -->
+      renderer="colorManagement:true; alpha:true; premultipliedAlpha:false; antialias:true"
       vr-mode-ui="enabled:false"
       device-orientation-permission-ui="enabled:false"
     >
@@ -87,41 +114,26 @@
         <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <a-entity light="type: ambient; intensity: 1.6"></a-entity>
-      <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
+      <!-- A bit softer lighting (too much light can look washed-out on text) -->
+      <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+      <a-entity light="type: directional; intensity: 0.9" position="1 2 1"></a-entity>
 
-      <!-- MindAR anchor (barcode) -->
-      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0"></a-entity>
+      <!-- MindAR raw anchor -->
+      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0">
+        <a-entity id="poseRaw" position="0 0 0" rotation="0 0 0"></a-entity>
+      </a-entity>
 
-      <!-- Smoothed pose follower -->
-      <a-entity id="anchorSmooth" smooth-follow-pose="target: #anchorRaw; posLerp: 0.14; rotLerp: 0.10">
-
-        <!-- Optional: show a faint plane just to see the anchor (can remove later) -->
-        <a-plane
-          id="refPlane"
-          position="0 0 0.001"
-          width="1.4"
-          height="0.7"
-          material="color:#ffffff; opacity:0.10; transparent:true; side:double;"
-          visible="false"
-        ></a-plane>
-
-        <!-- Your text placement: FIXED size + manual offset -->
+      <!-- Smoothed anchor that follows the raw one -->
+      <a-entity id="anchorSmooth"
+        smooth-follow="target: #anchorRaw; posLerp: 0.18; rotLerp: 0.12; sclLerp: 0.18">
         <a-entity
-          id="textRoot"
-          position="0 0 0.05"
+          id="modelEnt"
+          gltf-model="#model"
+          visible="false"
+          position="0 0 0.03"
           rotation="0 0 0"
-        >
-          <a-entity
-            id="modelEnt"
-            gltf-model="#model"
-            visible="false"
-            position="-0.25 0 0"
-            rotation="0 0 0"
-            scale="2.2 2.2 2.2"
-          ></a-entity>
-        </a-entity>
-
+          scale="0.75 0.75 0.75"
+        ></a-entity>
       </a-entity>
 
       <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
@@ -138,24 +150,24 @@
     const scene = document.getElementById("scene");
     const anchorRaw = document.getElementById("anchorRaw");
     const modelEnt = document.getElementById("modelEnt");
-    const refPlane = document.getElementById("refPlane");
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
       try {
+        // slightly lower pixel ratio helps stability; keep camera visible
         scene.renderer.setPixelRatio(Math.min(1.25, window.devicePixelRatio || 1));
-        scene.renderer.setClearColor(0x000000, 0);
+        // IMPORTANT: do NOT force transparent clearcolor here (alpha 0),
+        // because premultipliedAlpha handling is already set above.
+        // Let renderer handle it.
       } catch {}
     });
 
     anchorRaw.addEventListener("targetFound", () => {
-      refPlane.setAttribute("visible", "true");   // kannst du später entfernen
       modelEnt.setAttribute("visible", "true");
       hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
     anchorRaw.addEventListener("targetLost", () => {
-      refPlane.setAttribute("visible", "false");
       modelEnt.setAttribute("visible", "false");
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
@@ -163,19 +175,23 @@
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // Make sure text renders from both sides (often needed)
-      const obj = modelEnt.getObject3D("mesh");
-      if (obj) {
-        obj.traverse((n) => {
-          if (n.isMesh && n.material) {
-            const mats = Array.isArray(n.material) ? n.material : [n.material];
-            mats.forEach((m) => {
-              m.side = THREE.DoubleSide;
-              m.needsUpdate = true;
-            });
-          }
-        });
-      }
+      // Safety: make sure the model itself is not set to transparent by import
+      const mesh = modelEnt.getObject3D("mesh");
+      if (!mesh) return;
+
+      mesh.traverse(o => {
+        if (!o.material) return;
+
+        // keep it opaque
+        o.material.transparent = false;
+        o.material.opacity = 1;
+
+        // write depth so it doesn't look “see-through”
+        o.material.depthWrite = true;
+        o.material.depthTest = true;
+
+        o.material.needsUpdate = true;
+      });
     });
 
     modelEnt.addEventListener("model-error", () => {
