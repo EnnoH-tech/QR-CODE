@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2 stable)</title>
+  <title>MindAR + GLB (targets2 stable, bigger, opaque, centered)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -34,19 +34,20 @@
   </style>
 
   <script>
-    // Smooth-follow component: lerpt position + quaternion + scale
+    // Smooth-follow (lerp)
     AFRAME.registerComponent('smooth-follow', {
       schema: {
         target: { type: 'selector' },
-        posLerp: { type: 'number', default: 0.18 },   // kleiner = stabiler, aber träger
-        rotLerp: { type: 'number', default: 0.12 },
-        sclLerp: { type: 'number', default: 0.18 }
+        posLerp: { type: 'number', default: 0.14 },
+        rotLerp: { type: 'number', default: 0.10 },
+        sclLerp: { type: 'number', default: 0.14 }
       },
       init() {
-        this.v3 = new THREE.Vector3();
-        this.v3b = new THREE.Vector3();
+        this.p = new THREE.Vector3();
+        this.tp = new THREE.Vector3();
         this.q = new THREE.Quaternion();
-        this.qb = new THREE.Quaternion();
+        this.tq = new THREE.Quaternion();
+        this.ts = new THREE.Vector3();
       },
       tick() {
         const t = this.data.target;
@@ -55,22 +56,18 @@
         const a = this.el.object3D;
         const b = t.object3D;
 
-        // position
-        b.getWorldPosition(this.v3b);
-        a.getWorldPosition(this.v3);
-        this.v3.lerp(this.v3b, this.data.posLerp);
-        a.parent.worldToLocal(this.v3);
-        a.position.copy(this.v3);
+        // pos
+        b.getWorldPosition(this.tp);
+        a.parent.worldToLocal(this.tp);
+        a.position.lerp(this.tp, this.data.posLerp);
 
-        // rotation
-        b.getWorldQuaternion(this.qb);
-        a.getWorldQuaternion(this.q);
-        this.q.slerp(this.qb, this.data.rotLerp);
-        a.quaternion.copy(this.q);
+        // rot
+        b.getWorldQuaternion(this.tq);
+        a.quaternion.slerp(this.tq, this.data.rotLerp);
 
-        // scale (optional)
-        b.getWorldScale(this.v3b);
-        a.scale.lerp(this.v3b, this.data.sclLerp);
+        // scale
+        b.getWorldScale(this.ts);
+        a.scale.lerp(this.ts, this.data.sclLerp);
       }
     });
   </script>
@@ -102,23 +99,24 @@
       <a-entity light="type: ambient; intensity: 1.6"></a-entity>
       <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
-      <!-- MindAR raw anchor -->
-      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0">
-        <!-- Dummy marker entity (not visible) -->
-        <a-entity id="poseRaw" position="0 0 0" rotation="0 0 0"></a-entity>
-      </a-entity>
+      <!-- Raw MindAR anchor -->
+      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0"></a-entity>
 
-      <!-- Smoothed anchor that follows the raw one -->
-      <a-entity id="anchorSmooth" smooth-follow="target: #anchorRaw; posLerp: 0.18; rotLerp: 0.12; sclLerp: 0.18">
-        <!-- model slightly in front of surface -->
-        <a-entity
-          id="modelEnt"
-          gltf-model="#model"
-          visible="false"
-          position="0 0 0.03"
-          rotation="0 0 0"
-          scale="0.75 0.75 0.75"
-        ></a-entity>
+      <!-- Smoothed follower -->
+      <a-entity id="anchorSmooth" smooth-follow="target: #anchorRaw; posLerp: 0.14; rotLerp: 0.10; sclLerp: 0.14">
+
+        <!-- POSITION / SIZE TUNING -->
+        <a-entity id="offset" position="-0.22 0 0">
+          <a-entity
+            id="modelEnt"
+            gltf-model="#model"
+            visible="false"
+            position="0 0 0.03"
+            rotation="0 0 0"
+            scale="1.6 1.6 1.6"
+          ></a-entity>
+        </a-entity>
+
       </a-entity>
 
       <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
@@ -139,7 +137,6 @@
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
       try {
-        // lower pixel ratio for stability/perf (less jitter)
         scene.renderer.setPixelRatio(Math.min(1.25, window.devicePixelRatio || 1));
         scene.renderer.setClearColor(0x000000, 0);
       } catch {}
@@ -157,6 +154,24 @@
 
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
+
+      // Make materials fully opaque (remove transparency)
+      const obj = modelEnt.getObject3D("mesh");
+      if (obj) {
+        obj.traverse((n) => {
+          if (n.isMesh && n.material) {
+            const mats = Array.isArray(n.material) ? n.material : [n.material];
+            mats.forEach((m) => {
+              m.transparent = false;
+              m.opacity = 1.0;
+              m.alphaTest = 0;
+              m.depthWrite = true;
+              m.needsUpdate = true;
+            });
+          }
+        });
+        hud.textContent += "\nMAT: opaque";
+      }
     });
 
     modelEnt.addEventListener("model-error", () => {
