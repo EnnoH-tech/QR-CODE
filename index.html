@@ -3,32 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ZXing QR Test (Canvas)</title>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+  <title>BarcodeDetector Test</title>
   <style>
     body { margin:0; background:#000; color:#fff; font-family:-apple-system,system-ui; }
-    #hud { position:fixed; top:10px; left:10px; background:rgba(0,0,0,.6); padding:8px; }
+    #hud { position:fixed; top:10px; left:10px; background:rgba(0,0,0,.6); padding:8px; z-index:2; }
     video { width:100vw; height:100vh; object-fit:cover; }
-    canvas { display:none; }
   </style>
 </head>
 <body>
 
 <div id="hud">starting…</div>
 <video id="video" playsinline webkit-playsinline muted></video>
-<canvas id="c"></canvas>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d", { willReadFrequently:true });
 const hud = document.getElementById("hud");
-const reader = new ZXing.BrowserQRCodeReader();
+const video = document.getElementById("video");
+
+if (!("BarcodeDetector" in window)) {
+  hud.textContent = "BarcodeDetector NOT supported";
+  throw new Error("BarcodeDetector not supported");
+}
+
+const detector = new BarcodeDetector({ formats: ["qr_code"] });
 
 async function start() {
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode:{ ideal:"environment" } },
-    audio:false
+    video: { facingMode: { ideal: "environment" } },
+    audio: false
   });
   video.srcObject = stream;
   await video.play();
@@ -36,26 +37,18 @@ async function start() {
   scan();
 }
 
-function scan() {
-  if (video.readyState < 2) {
-    requestAnimationFrame(scan);
-    return;
+async function scan() {
+  if (video.readyState >= 2) {
+    try {
+      const barcodes = await detector.detect(video);
+      if (barcodes.length) {
+        hud.textContent = "QR FOUND:\n" + barcodes[0].rawValue;
+        return; // stop on success
+      }
+    } catch (e) {
+      hud.textContent = "DETECT ERROR";
+    }
   }
-
-  // Downscale → ZXing mag das
-  const w = 640;
-  const h = Math.round(video.videoHeight / video.videoWidth * w);
-  canvas.width = w;
-  canvas.height = h;
-  ctx.drawImage(video, 0, 0, w, h);
-
-  try {
-    const result = reader.decodeFromCanvas(canvas);
-    hud.textContent = "QR FOUND:\n" + result.getText();
-  } catch (e) {
-    hud.textContent = "scanning…";
-  }
-
   requestAnimationFrame(scan);
 }
 
