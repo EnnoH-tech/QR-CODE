@@ -3,47 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) – perspective tilt</title>
+  <title>MindAR + GLB – Debug (FOUND aber nichts sichtbar)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    html, body {
-      margin:0; padding:0;
-      background:#000;
-      overflow:hidden;
-      width:100%; height:100%;
-    }
+    html, body { margin:0; padding:0; background:#000; overflow:hidden; width:100%; height:100%; }
     :root { --vh: 1vh; }
-
-    #app {
-      position:fixed;
-      inset:0;
-      width:100vw;
-      height:calc(var(--vh)*100);
-      background:#000;
-      overflow:hidden;
-    }
+    #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
 
     a-scene{
-      position:absolute !important;
-      inset:0 !important;
-      width:100% !important;
-      height:100% !important;
+      position:absolute !important; inset:0 !important;
+      width:100% !important; height:100% !important;
       background:transparent !important;
     }
-
-    .mindar-container,
-    .mindar-container video,
-    .mindar-container canvas,
-    canvas.a-canvas{
-      position:absolute !important;
-      inset:0 !important;
-      width:100% !important;
-      height:100% !important;
-      object-fit:cover !important;
-      background:transparent !important;
+    .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
+      position:absolute !important; inset:0 !important;
+      width:100% !important; height:100% !important;
+      object-fit:cover !important; background:transparent !important;
     }
 
     #hud{
@@ -54,12 +32,12 @@
       padding:8px 10px;
       background:rgba(0,0,0,0.65);
       color:#fff;
-      font:13px/1.25 -apple-system, system-ui, sans-serif;
+      font:13px/1.25 -apple-system,system-ui,sans-serif;
       border-radius:6px;
       white-space:pre-line;
       z-index:9999;
-      user-select:none;
-      -webkit-user-select:none;
+      user-select:none; -webkit-user-select:none;
+      max-width: calc(100vw - 20px);
     }
   </style>
 
@@ -72,14 +50,12 @@
         maxDeg:   { type: "number", default: 35 },
         lerp:     { type: "number", default: 0.30 }
       },
-
       init() {
         this.vCamW = new THREE.Vector3();
         this.vCamL = new THREE.Vector3();
       },
-
       tick() {
-        const cam = this.el.sceneEl.camera;
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
         const anchorEl = this.data.anchor;
         if (!cam || !anchorEl) return;
 
@@ -92,8 +68,8 @@
 
         const max = THREE.MathUtils.degToRad(this.data.maxDeg);
 
-        const ry = THREE.MathUtils.clamp(yaw * this.data.strength, -max, max);
-        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength, -max, max);
+        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,     -max, max);
+        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength,  -max, max);
 
         const r = this.el.object3D.rotation;
         r.x = THREE.MathUtils.lerp(r.x, rx, this.data.lerp);
@@ -122,36 +98,38 @@
       vr-mode-ui="enabled:false"
       device-orientation-permission-ui="enabled:false"
     >
-      <a-assets>
-        <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
-      </a-assets>
-
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <a-entity position="0 0 0.01">
-
-          <!-- Position bleibt stabil -->
+        <a-entity id="surface" position="0 0 0.01">
           <a-entity id="placeRig" position="-1 0 0">
 
-            <!-- Nur Rotation / Verjüngung -->
             <a-entity
               id="tiltRig"
               perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
             >
+              <!-- TEST: Wird 3D überhaupt sichtbar? -->
+              <a-box
+                id="testBox"
+                visible="false"
+                position="0 0 0.03"
+                depth="0.05" height="0.05" width="0.05"
+                material="color:#ff0000; opacity:0.95"
+              ></a-box>
+
+              <!-- GLB direkt laden (ohne a-assets) -->
               <a-entity
                 id="modelEnt"
-                gltf-model="#model"
+                gltf-model="/QR-CODE/enno6_test.glb"
                 visible="false"
-                position="0 0 0"
+                position="0 0 0.03"
                 rotation="0 0 0"
                 scale="2.75 2.75 2.75"
               ></a-entity>
             </a-entity>
 
           </a-entity>
-
         </a-entity>
       </a-entity>
 
@@ -160,39 +138,67 @@
   </div>
 
   <script>
-    function setVH(){
-      document.documentElement.style.setProperty(
-        '--vh', `${window.innerHeight * 0.01}px`
-      );
-    }
+    function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
     window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
 
     const hud = document.getElementById("hud");
+    const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
+    const testBox = document.getElementById("testBox");
+
+    function log(line){
+      hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + line;
+    }
+
+    // check targets file reachable
+    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(() => log("TARGETS2: OK"))
+      .catch(e => log("TARGETS2: FAIL (" + e.message + ")"));
+
+    // check glb reachable (important)
+    fetch("/QR-CODE/enno6_test.glb", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(() => log("GLB FETCH: OK"))
+      .catch(e => log("GLB FETCH: FAIL (" + e.message + ")"));
+
+    scene.addEventListener("loaded", () => {
+      hud.textContent = "SCENE: loaded\nTARGET: scanning…";
+      try {
+        const r = scene.renderer;
+        if (r && r.setClearColor) r.setClearColor(0x000000, 0);
+      } catch {}
+    });
+
+    scene.addEventListener("arReady", () => log("AR: READY"));
+    scene.addEventListener("arError", (e) => {
+      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
+      log("AR: ERROR " + msg);
+    });
 
     anchor.addEventListener("targetFound", () => {
-      modelEnt.setAttribute("visible", "true");
-      hud.textContent = "TARGET: FOUND";
+      log("TARGET: FOUND");
+      testBox.setAttribute("visible", "true");   // wenn du den roten Würfel siehst: 3D ok
+      modelEnt.setAttribute("visible", "true");  // Modell an
     });
 
     anchor.addEventListener("targetLost", () => {
+      log("TARGET: LOST");
+      testBox.setAttribute("visible", "false");
       modelEnt.setAttribute("visible", "false");
-      hud.textContent = "TARGET: LOST";
     });
 
     modelEnt.addEventListener("model-loaded", () => {
-      hud.textContent += "\nGLB: LOADED";
+      log("GLB: LOADED");
 
-      // wichtig bei zusätzlichem Kippen
       const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) return;
+      if (!mesh) { log("MESH: missing"); return; }
 
       mesh.traverse(o => {
         if (!o.isMesh || !o.material) return;
-
         o.frustumCulled = false;
         o.material.side = THREE.DoubleSide;
         o.material.transparent = false;
@@ -201,6 +207,13 @@
         o.material.depthTest = true;
         o.material.needsUpdate = true;
       });
+
+      log("MATERIAL: DoubleSide");
+    });
+
+    modelEnt.addEventListener("model-error", (e) => {
+      log("GLB: ERROR");
+      try { log("DETAIL: " + JSON.stringify(e.detail)); } catch {}
     });
   </script>
 </body>
