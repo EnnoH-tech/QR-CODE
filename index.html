@@ -3,185 +3,171 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (DEBUG sicher sichtbar)</title>
+  <title>MindAR + GLB – stable scale + perspective</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    html, body { margin:0; padding:0; background:#000; overflow:hidden; width:100%; height:100%; }
+    html, body {
+      margin:0; padding:0; width:100%; height:100%;
+      background:#000; overflow:hidden;
+    }
     :root { --vh: 1vh; }
-    #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
-
-    a-scene{
-      position:absolute !important; inset:0 !important;
-      width:100% !important; height:100% !important;
+    #app {
+      position:fixed; inset:0;
+      width:100vw; height:calc(var(--vh)*100);
+      overflow:hidden;
+    }
+    a-scene {
+      position:absolute !important;
+      inset:0 !important;
+      width:100% !important;
+      height:100% !important;
       background:transparent !important;
     }
-    .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
-      position:absolute !important; inset:0 !important;
-      width:100% !important; height:100% !important;
-      object-fit:cover !important; background:transparent !important;
-    }
-
-    #hud{
-      position:fixed;
-      top: env(safe-area-inset-top, 0px);
-      left: env(safe-area-inset-left, 0px);
-      margin:10px;
-      padding:8px 10px;
-      background:rgba(0,0,0,0.65);
-      color:#fff;
-      font:13px/1.25 -apple-system,system-ui,sans-serif;
-      border-radius:6px;
-      white-space:pre-line;
-      z-index:9999;
-      user-select:none; -webkit-user-select:none;
-      max-width: calc(100vw - 20px);
+    .mindar-container,
+    .mindar-container video,
+    .mindar-container canvas,
+    canvas.a-canvas {
+      position:absolute !important;
+      inset:0 !important;
+      width:100% !important;
+      height:100% !important;
+      object-fit:cover !important;
     }
   </style>
 
   <script>
-    // --- robust HUD logger (nichts wird mehr überschrieben)
-    const LOG = [];
-    function log(line){
-      LOG.push(line);
-      if (LOG.length > 30) LOG.shift();
-      const hud = document.getElementById("hud");
-      if (hud) hud.textContent = LOG.join("\n");
-    }
-    window.addEventListener("error", (e) => log("JS ERROR: " + (e.message || "unknown")));
+    // ---------- SCALE BY DISTANCE ----------
+    AFRAME.registerComponent("scale-by-distance", {
+      schema: {
+        target:   { type: "selector" },
+        minScale: { type: "number", default: 2.2 },
+        maxScale: { type: "number", default: 5.0 },
+        minDist:  { type: "number", default: 0.35 },
+        maxDist:  { type: "number", default: 1.6 },
+        power:    { type: "number", default: 2.4 },
+        lerp:     { type: "number", default: 0.3 }
+      },
+      init() {
+        this.vCam = new THREE.Vector3();
+        this.vTar = new THREE.Vector3();
+        this.cur  = new THREE.Vector3(1,1,1);
+        this.goal = new THREE.Vector3(1,1,1);
+      },
+      tick() {
+        const cam = this.el.sceneEl.camera;
+        const t   = this.data.target;
+        if (!cam || !t) return;
+
+        cam.getWorldPosition(this.vCam);
+        t.object3D.getWorldPosition(this.vTar);
+
+        let d = this.vCam.distanceTo(this.vTar);
+        d = THREE.MathUtils.clamp(d, this.data.minDist, this.data.maxDist);
+
+        let n = 1 - (d - this.data.minDist) / (this.data.maxDist - this.data.minDist);
+        n = Math.pow(n, this.data.power);
+
+        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, n);
+        this.goal.set(s, s, s);
+        this.cur.lerp(this.goal, this.data.lerp);
+        this.el.object3D.scale.copy(this.cur);
+      }
+    });
+
+    // ---------- SAFE PERSPECTIVE (NO ROTATION) ----------
+    AFRAME.registerComponent("perspective-flucht", {
+      schema: {
+        anchor: { type: "selector" },
+        amount: { type: "number", default: 0.6 },
+        max:    { type: "number", default: 0.65 },
+        lerp:   { type: "number", default: 0.3 }
+      },
+      init() {
+        this.vCamW = new THREE.Vector3();
+        this.vCamL = new THREE.Vector3();
+        this.curX = 1;
+        this.curY = 1;
+      },
+      tick() {
+        const cam = this.el.sceneEl.camera;
+        const a   = this.data.anchor;
+        if (!cam || !a) return;
+
+        cam.getWorldPosition(this.vCamW);
+        this.vCamL.copy(this.vCamW);
+        a.object3D.worldToLocal(this.vCamL);
+
+        const yaw   = Math.abs(Math.atan2(this.vCamL.x, -this.vCamL.z));
+        const pitch = Math.abs(Math.atan2(this.vCamL.y, -this.vCamL.z));
+
+        const ox = Math.min(yaw   / (Math.PI / 3), 1);
+        const oy = Math.min(pitch / (Math.PI / 3), 1);
+
+        const tx = 1 - Math.min(ox * this.data.amount, this.data.max);
+        const ty = 1 - Math.min(oy * this.data.amount, this.data.max);
+
+        this.curX = THREE.MathUtils.lerp(this.curX, tx, this.data.lerp);
+        this.curY = THREE.MathUtils.lerp(this.curY, ty, this.data.lerp);
+
+        this.el.object3D.scale.set(this.curX, this.curY, 1);
+      }
+    });
   </script>
 </head>
 
 <body>
-  <div id="app">
-    <div id="hud">BOOT…</div>
+<div id="app">
+  <a-scene
+    embedded
+    mindar-image="
+      imageTargetSrc: /QR-CODE/targets2.mind;
+      autoStart: true;
+      uiLoading: true;
+      uiScanning: true;
+      filterMinCF: 0.001;
+      filterBeta: 0.01;
+    "
+    renderer="colorManagement:true"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:false"
+  >
+    <a-assets>
+      <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
+    </a-assets>
 
-    <a-scene
-      id="scene"
-      embedded
-      mindar-image="
-        imageTargetSrc: /QR-CODE/targets2.mind;
-        autoStart: true;
-        uiLoading: true;
-        uiScanning: true;
-        filterMinCF: 0.001;
-        filterBeta: 0.01;
-      "
-      renderer="colorManagement:true"
-      vr-mode-ui="enabled:false"
-      device-orientation-permission-ui="enabled:false"
-    >
-      <a-assets>
-        <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
-      </a-assets>
+    <a-entity light="type: ambient; intensity:1.2"></a-entity>
+    <a-entity light="type: directional; intensity:1" position="1 2 1"></a-entity>
 
-      <a-entity light="type: ambient; intensity: 1.2"></a-entity>
-      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-      <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <a-entity id="surface" position="0 0 0.01">
-
-          <!-- PROBE: muss bei FOUND sichtbar werden -->
-          <a-box id="probe"
-                 visible="false"
-                 position="0 0 0.03"
-                 depth="0.06" height="0.06" width="0.06"
-                 material="color:#ff0000; opacity:0.95">
-          </a-box>
-
-          <a-entity id="offset" position="0 0 0">
+    <a-entity id="anchor" mindar-image-target="targetIndex:0">
+      <a-entity position="0 0 0.01">
+        <a-entity position="-1 0 0">
+          <a-entity perspective-flucht="anchor:#anchor">
             <a-entity
               id="modelEnt"
               gltf-model="#model"
-              visible="false"
-              position="-1 0 0"
-              rotation="0 0 0"
+              position="0 0 0"
               scale="2.75 2.75 2.75"
+              scale-by-distance="target:#anchor"
             ></a-entity>
           </a-entity>
         </a-entity>
       </a-entity>
+    </a-entity>
 
-      <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
-    </a-scene>
-  </div>
+    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+  </a-scene>
+</div>
 
-  <script>
-    // iOS dynamic viewport height fix
-    function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
-    setVH();
-    window.addEventListener('resize', setVH);
-    window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
-
-    const scene = document.getElementById("scene");
-    const anchor = document.getElementById("anchor");
-    const modelEnt = document.getElementById("modelEnt");
-    const probe = document.getElementById("probe");
-
-    // Checks
-    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => { log("TARGETS2: OK"); })
-      .catch(e => { log("TARGETS2: FAIL (" + e.message + ")"); });
-
-    fetch("/QR-CODE/enno6_test.glb", { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => { log("GLB FETCH: OK"); })
-      .catch(e => { log("GLB FETCH: FAIL (" + e.message + ")"); });
-
-    scene.addEventListener("loaded", () => {
-      log("SCENE: loaded");
-      try {
-        const r = scene.renderer;
-        if (r && r.setClearColor) r.setClearColor(0x000000, 0);
-      } catch {}
-    });
-
-    scene.addEventListener("arReady", () => log("AR: READY"));
-    scene.addEventListener("arError", (e) => {
-      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
-      log("AR: ERROR " + msg);
-    });
-
-    anchor.addEventListener("targetFound", () => {
-      log("TARGET: FOUND");
-
-      // Probe sichtbar machen (wenn du die NICHT siehst, ist 3D Placement/Render falsch)
-      probe.setAttribute("visible", "true");
-
-      // Jetzt erzwingen wir: Modell direkt auf den Marker (damit es garantiert im Bild ist)
-      modelEnt.setAttribute("position", "0 0 0.03");
-      modelEnt.setAttribute("scale", "2.75 2.75 2.75");
-      modelEnt.setAttribute("rotation", "0 0 0");
-      modelEnt.setAttribute("visible", "true");
-    });
-
-    anchor.addEventListener("targetLost", () => {
-      log("TARGET: LOST");
-      probe.setAttribute("visible", "false");
-      modelEnt.setAttribute("visible", "false");
-    });
-
-    modelEnt.addEventListener("model-loaded", () => {
-      log("GLB: LOADED");
-
-      // Make sure it never disappears because of backfaces/culling
-      const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) { log("MESH: missing"); return; }
-
-      mesh.traverse(o => {
-        if (!o.isMesh || !o.material) return;
-        o.frustumCulled = false;
-        o.material.side = THREE.DoubleSide;
-        o.material.needsUpdate = true;
-      });
-
-      log("MESH: OK");
-    });
-
-    modelEnt.addEventListener("model-error", () => log("GLB: ERROR"));
-  </script>
+<script>
+  function setVH(){
+    document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+  }
+  setVH();
+  window.addEventListener('resize', setVH);
+  window.addEventListener('orientationchange', () => setTimeout(setVH, 200));
+</script>
 </body>
 </html>
