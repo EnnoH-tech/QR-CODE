@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2 stable, bigger, opaque, centered)</title>
+  <title>MindAR + GLB (targets2 debug visible)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -30,11 +30,12 @@
       white-space:pre-line;
       z-index:9999;
       user-select:none; -webkit-user-select:none;
+      max-width: calc(100vw - 20px);
     }
   </style>
 
   <script>
-    // Smooth-follow (lerp)
+    // smoothing (same as before, stable)
     AFRAME.registerComponent('smooth-follow', {
       schema: {
         target: { type: 'selector' },
@@ -43,9 +44,7 @@
         sclLerp: { type: 'number', default: 0.14 }
       },
       init() {
-        this.p = new THREE.Vector3();
         this.tp = new THREE.Vector3();
-        this.q = new THREE.Quaternion();
         this.tq = new THREE.Quaternion();
         this.ts = new THREE.Vector3();
       },
@@ -56,16 +55,13 @@
         const a = this.el.object3D;
         const b = t.object3D;
 
-        // pos
         b.getWorldPosition(this.tp);
         a.parent.worldToLocal(this.tp);
         a.position.lerp(this.tp, this.data.posLerp);
 
-        // rot
         b.getWorldQuaternion(this.tq);
         a.quaternion.slerp(this.tq, this.data.rotLerp);
 
-        // scale
         b.getWorldScale(this.ts);
         a.scale.lerp(this.ts, this.data.sclLerp);
       }
@@ -99,23 +95,40 @@
       <a-entity light="type: ambient; intensity: 1.6"></a-entity>
       <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
-      <!-- Raw MindAR anchor -->
+      <!-- raw anchor -->
       <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0"></a-entity>
 
-      <!-- Smoothed follower -->
+      <!-- smoothed anchor -->
       <a-entity id="anchorSmooth" smooth-follow="target: #anchorRaw; posLerp: 0.14; rotLerp: 0.10; sclLerp: 0.14">
 
-        <!-- POSITION / SIZE TUNING -->
-        <a-entity id="offset" position="-0.22 0 0">
-          <a-entity
-            id="modelEnt"
-            gltf-model="#model"
-            visible="false"
-            position="0 0 0.03"
-            rotation="0 0 0"
-            scale="1.6 1.6 1.6"
-          ></a-entity>
-        </a-entity>
+        <!-- Always-visible reference: shows where the target plane is -->
+        <a-plane
+          id="refPlane"
+          position="0 0 0.001"
+          width="1.4"
+          height="0.7"
+          material="color:#ffffff; opacity:0.18; transparent:true; side:double;"
+          visible="false"
+        ></a-plane>
+
+        <!-- Always-visible small box at origin (helps you see the anchor point) -->
+        <a-box
+          id="refBox"
+          position="0 0 0.02"
+          width="0.06" height="0.06" depth="0.06"
+          material="color:#ffffff;"
+          visible="false"
+        ></a-box>
+
+        <!-- Your GLB -->
+        <a-entity
+          id="modelEnt"
+          gltf-model="#model"
+          visible="false"
+          position="0 0 0.04"
+          rotation="0 0 0"
+          scale="1 1 1"
+        ></a-entity>
 
       </a-entity>
 
@@ -133,6 +146,8 @@
     const scene = document.getElementById("scene");
     const anchorRaw = document.getElementById("anchorRaw");
     const modelEnt = document.getElementById("modelEnt");
+    const refPlane = document.getElementById("refPlane");
+    const refBox = document.getElementById("refBox");
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
@@ -143,35 +158,21 @@
     });
 
     anchorRaw.addEventListener("targetFound", () => {
+      refPlane.setAttribute("visible", "true");
+      refBox.setAttribute("visible", "true");
       modelEnt.setAttribute("visible", "true");
-      hud.textContent = "TARGET: FOUND\nMODEL: visible";
+      hud.textContent = "TARGET: FOUND\nREF: visible\nMODEL: visible";
     });
 
     anchorRaw.addEventListener("targetLost", () => {
+      refPlane.setAttribute("visible", "false");
+      refBox.setAttribute("visible", "false");
       modelEnt.setAttribute("visible", "false");
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
-
-      // Make materials fully opaque (remove transparency)
-      const obj = modelEnt.getObject3D("mesh");
-      if (obj) {
-        obj.traverse((n) => {
-          if (n.isMesh && n.material) {
-            const mats = Array.isArray(n.material) ? n.material : [n.material];
-            mats.forEach((m) => {
-              m.transparent = false;
-              m.opacity = 1.0;
-              m.alphaTest = 0;
-              m.depthWrite = true;
-              m.needsUpdate = true;
-            });
-          }
-        });
-        hud.textContent += "\nMAT: opaque";
-      }
     });
 
     modelEnt.addEventListener("model-error", () => {
