@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind)</title>
+  <title>MindAR + GLB (targets2 + sticker + center)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -12,18 +12,11 @@
     html, body { margin:0; padding:0; background:#000; overflow:hidden; width:100%; height:100%; }
     :root { --vh: 1vh; }
     #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
-
-    a-scene{
-      position:absolute !important; inset:0 !important;
-      width:100% !important; height:100% !important;
-      background:transparent !important;
-    }
+    a-scene{ position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; background:transparent !important; }
     .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
-      position:absolute !important; inset:0 !important;
-      width:100% !important; height:100% !important;
+      position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
       object-fit:cover !important; background:transparent !important;
     }
-
     #hud{
       position:fixed;
       top: env(safe-area-inset-top, 0px);
@@ -68,19 +61,18 @@
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-      <!-- Wenn targets2.mind nur 1 Target enthält: targetIndex 0 -->
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-        <!-- minimal vor die Fläche, damit kein Flimmern -->
-        <a-entity id="surface" position="0 0 0.01">
-          <!-- optionaler Offset: schiebt den Inhalt nach rechts/links -->
-          <a-entity id="offset" position="0 0 0">
+        <!-- Sticker-Ebene: sehr nah an der Targetfläche -->
+        <a-entity id="surface" position="0 0 0.002">
+          <!-- wrapper für Auto-Center + optionales Nudge -->
+          <a-entity id="wrap" position="0 0 0" rotation="0 0 0">
             <a-entity
               id="modelEnt"
               gltf-model="#model"
               visible="false"
               position="0 0 0"
               rotation="-90 0 0"
-              scale="0.75 0.75 0.75"
+              scale="0.75 0.75 0.02"
             ></a-entity>
           </a-entity>
         </a-entity>
@@ -91,7 +83,6 @@
   </div>
 
   <script>
-    // iOS dynamic viewport height fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
@@ -100,9 +91,15 @@
     const hud = document.getElementById("hud");
     const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
+    const wrap = document.getElementById("wrap");
     const modelEnt = document.getElementById("modelEnt");
 
-    // Quick check: ist targets2.mind erreichbar?
+    // Feintuning falls du nach Auto-Center noch minimal schieben willst:
+    const nudgeX = 0.00;   // + = nach rechts (für "mehr Mitte zwischen den Wörtern")
+    const nudgeY = 0.00;   // + = nach oben
+    wrap.object3D.position.set(nudgeX, nudgeY, 0);
+
+    // Pfadcheck targets2
     fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
       .then(() => { hud.textContent += "\nTARGETS2: OK"; })
@@ -116,13 +113,6 @@
       } catch {}
     });
 
-    // MindAR system events
-    scene.addEventListener("arReady", () => { hud.textContent = "AR: READY\nTARGET: scanning…"; });
-    scene.addEventListener("arError", (e) => {
-      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
-      hud.textContent = "AR: ERROR\n" + msg;
-    });
-
     anchor.addEventListener("targetFound", () => {
       modelEnt.setAttribute("visible", "true");
       hud.textContent = "TARGET: FOUND\nMODEL: visible";
@@ -133,8 +123,31 @@
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
-    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
+    modelEnt.addEventListener("model-loaded", () => {
+      hud.textContent += "\nGLB: LOADED";
+
+      // Auto-center: Mesh um Bounding-Box-Mitte verschieben
+      const obj = modelEnt.getObject3D("mesh");
+      if (!obj) {
+        hud.textContent += "\nCENTER: mesh missing";
+        return;
+      }
+
+      obj.updateWorldMatrix(true, true);
+
+      const box = new THREE.Box3().setFromObject(obj);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+
+      // Pivot-Korrektur: Mittelpunkt auf (0,0,0)
+      obj.position.sub(center);
+
+      hud.textContent += "\nCENTER: applied";
+    });
+
+    modelEnt.addEventListener("model-error", () => {
+      hud.textContent += "\nGLB: ERROR";
+    });
   </script>
 </body>
 </html>
