@@ -1,58 +1,90 @@
 <!doctype html>
-<html>
+<html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BarcodeDetector Test</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MindAR Image Tracking + GLB</title>
+
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+  <!-- MindAR (A-Frame) -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
   <style>
-    body { margin:0; background:#000; color:#fff; font-family:-apple-system,system-ui; }
-    #hud { position:fixed; top:10px; left:10px; background:rgba(0,0,0,.6); padding:8px; z-index:2; }
-    video { width:100vw; height:100vh; object-fit:cover; }
+    html, body { margin:0; padding:0; overflow:hidden; background:#000; }
+    #hud{
+      position:fixed; top:10px; left:10px; padding:8px 10px;
+      background:rgba(0,0,0,.65); color:#fff; font:13px/1.25 -apple-system,system-ui,sans-serif;
+      border-radius:6px; z-index:9999; white-space:pre-line;
+      user-select:none; -webkit-user-select:none;
+    }
   </style>
 </head>
+
 <body>
+  <div id="hud">BOOT…</div>
 
-<div id="hud">starting…</div>
-<video id="video" playsinline webkit-playsinline muted></video>
+  <a-scene
+    mindar-image="imageTargetSrc: /QR-CODE/targets.mind; autoStart: true; uiScanning: true; uiLoading: true;"
+    embedded
+    renderer="colorManagement:true"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:false"
+  >
+    <a-assets>
+      <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
+    </a-assets>
 
-<script>
-const hud = document.getElementById("hud");
-const video = document.getElementById("video");
+    <!-- Licht -->
+    <a-entity light="type: ambient; intensity: 1.2"></a-entity>
+    <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-if (!("BarcodeDetector" in window)) {
-  hud.textContent = "BarcodeDetector NOT supported";
-  throw new Error("BarcodeDetector not supported");
-}
+    <!-- Target Anchor: targetIndex 0 = erstes Bild im targets.mind -->
+    <a-entity mindar-image-target="targetIndex: 0" id="anchor">
+      <!-- Debug Box -->
+      <a-box position="0 0 0" depth="0.2" height="0.2" width="0.2"></a-box>
 
-const detector = new BarcodeDetector({ formats: ["qr_code"] });
+      <!-- GLB -->
+      <a-entity
+        id="modelEnt"
+        gltf-model="#model"
+        position="0 0 0"
+        rotation="0 0 0"
+        scale="1 1 1"
+      ></a-entity>
+    </a-entity>
 
-async function start() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: "environment" } },
-    audio: false
-  });
-  video.srcObject = stream;
-  await video.play();
-  hud.textContent = "CAMERA OK – scanning…";
-  scan();
-}
+    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+  </a-scene>
 
-async function scan() {
-  if (video.readyState >= 2) {
-    try {
-      const barcodes = await detector.detect(video);
-      if (barcodes.length) {
-        hud.textContent = "QR FOUND:\n" + barcodes[0].rawValue;
-        return; // stop on success
-      }
-    } catch (e) {
-      hud.textContent = "DETECT ERROR";
-    }
-  }
-  requestAnimationFrame(scan);
-}
+  <script>
+    const hud = document.getElementById("hud");
+    const scene = document.querySelector("a-scene");
+    const anchor = document.getElementById("anchor");
+    const modelEnt = document.getElementById("modelEnt");
 
-start();
-</script>
+    hud.textContent = "SCENE: loading…";
+
+    scene.addEventListener("loaded", () => {
+      hud.textContent = "SCENE: loaded\nTARGET: scanning…";
+    });
+
+    anchor.addEventListener("targetFound", () => {
+      hud.textContent = "TARGET: FOUND";
+    });
+
+    anchor.addEventListener("targetLost", () => {
+      hud.textContent = "TARGET: LOST";
+    });
+
+    modelEnt.addEventListener("model-loaded", () => {
+      hud.textContent += "\nMODEL: LOADED";
+    });
+
+    modelEnt.addEventListener("model-error", () => {
+      hud.textContent += "\nMODEL: ERROR";
+    });
+  </script>
 </body>
 </html>
