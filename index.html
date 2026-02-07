@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (camera visible, less “transparent” edges)</title>
+  <title>MindAR + GLB (targets2.mind)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -14,15 +14,14 @@
     #app { position:fixed; inset:0; width:100vw; height:calc(var(--vh)*100); background:#000; overflow:hidden; }
 
     a-scene{
-      position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
+      position:absolute !important; inset:0 !important;
+      width:100% !important; height:100% !important;
       background:transparent !important;
     }
-
-    /* Keep camera visible: video stays behind WebGL canvas */
     .mindar-container, .mindar-container video, .mindar-container canvas, canvas.a-canvas{
-      position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
-      object-fit:cover !important;
-      background:transparent !important;
+      position:absolute !important; inset:0 !important;
+      width:100% !important; height:100% !important;
+      object-fit:cover !important; background:transparent !important;
     }
 
     #hud{
@@ -38,50 +37,9 @@
       white-space:pre-line;
       z-index:9999;
       user-select:none; -webkit-user-select:none;
+      max-width: calc(100vw - 20px);
     }
   </style>
-
-  <script>
-    // Smooth-follow component: lerpt position + quaternion + scale
-    AFRAME.registerComponent('smooth-follow', {
-      schema: {
-        target: { type: 'selector' },
-        posLerp: { type: 'number', default: 0.18 },
-        rotLerp: { type: 'number', default: 0.12 },
-        sclLerp: { type: 'number', default: 0.18 }
-      },
-      init() {
-        this.v3 = new THREE.Vector3();
-        this.v3b = new THREE.Vector3();
-        this.q = new THREE.Quaternion();
-        this.qb = new THREE.Quaternion();
-      },
-      tick() {
-        const t = this.data.target;
-        if (!t) return;
-
-        const a = this.el.object3D;
-        const b = t.object3D;
-
-        // position
-        b.getWorldPosition(this.v3b);
-        a.getWorldPosition(this.v3);
-        this.v3.lerp(this.v3b, this.data.posLerp);
-        a.parent.worldToLocal(this.v3);
-        a.position.copy(this.v3);
-
-        // rotation
-        b.getWorldQuaternion(this.qb);
-        a.getWorldQuaternion(this.q);
-        this.q.slerp(this.qb, this.data.rotLerp);
-        a.quaternion.copy(this.q);
-
-        // scale (optional)
-        b.getWorldScale(this.v3b);
-        a.scale.lerp(this.v3b, this.data.sclLerp);
-      }
-    });
-  </script>
 </head>
 
 <body>
@@ -96,17 +54,10 @@
         autoStart: true;
         uiLoading: true;
         uiScanning: true;
-        filterMinCF: 0.0005;
-        filterBeta: 0.02;
+        filterMinCF: 0.001;
+        filterBeta: 0.01;
       "
-
-      <!--
-        Camera must stay visible => alpha:true.
-        The “milky/transparent” look on thin text often comes from premultipliedAlpha.
-        premultipliedAlpha:false usually fixes that blending on top of the camera video.
-        If you still see “see-through” edges, set antialias:false (next line).
-      -->
-      renderer="colorManagement:true; alpha:true; premultipliedAlpha:false; antialias:true"
+      renderer="colorManagement:true"
       vr-mode-ui="enabled:false"
       device-orientation-permission-ui="enabled:false"
     >
@@ -114,26 +65,25 @@
         <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
       </a-assets>
 
-      <!-- A bit softer lighting (too much light can look washed-out on text) -->
-      <a-entity light="type: ambient; intensity: 0.9"></a-entity>
-      <a-entity light="type: directional; intensity: 0.9" position="1 2 1"></a-entity>
+      <a-entity light="type: ambient; intensity: 1.2"></a-entity>
+      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
-      <!-- MindAR raw anchor -->
-      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0">
-        <a-entity id="poseRaw" position="0 0 0" rotation="0 0 0"></a-entity>
-      </a-entity>
-
-      <!-- Smoothed anchor that follows the raw one -->
-      <a-entity id="anchorSmooth"
-        smooth-follow="target: #anchorRaw; posLerp: 0.18; rotLerp: 0.12; sclLerp: 0.18">
-        <a-entity
-          id="modelEnt"
-          gltf-model="#model"
-          visible="false"
-          position="0 0 0.03"
-          rotation="0 0 0"
-          scale="0.75 0.75 0.75"
-        ></a-entity>
+      <!-- Wenn targets2.mind nur 1 Target enthält: targetIndex 0 -->
+      <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+        <!-- minimal vor die Fläche, damit kein Flimmern -->
+        <a-entity id="surface" position="0 0 0.01">
+          <!-- optionaler Offset: schiebt den Inhalt nach rechts/links -->
+          <a-entity id="offset" position="0 0 0">
+            <a-entity
+              id="modelEnt"
+              gltf-model="#model"
+              visible="false"
+              position="0 0 0"
+              rotation="-90 0 0"
+              scale="0.75 0.75 0.75"
+            ></a-entity>
+          </a-entity>
+        </a-entity>
       </a-entity>
 
       <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
@@ -141,6 +91,7 @@
   </div>
 
   <script>
+    // iOS dynamic viewport height fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
@@ -148,55 +99,42 @@
 
     const hud = document.getElementById("hud");
     const scene = document.getElementById("scene");
-    const anchorRaw = document.getElementById("anchorRaw");
+    const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
+
+    // Quick check: ist targets2.mind erreichbar?
+    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(() => { hud.textContent += "\nTARGETS2: OK"; })
+      .catch(e => { hud.textContent += "\nTARGETS2: FAIL (" + e.message + ")"; });
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
       try {
-        // slightly lower pixel ratio helps stability; keep camera visible
-        scene.renderer.setPixelRatio(Math.min(1.25, window.devicePixelRatio || 1));
-        // IMPORTANT: do NOT force transparent clearcolor here (alpha 0),
-        // because premultipliedAlpha handling is already set above.
-        // Let renderer handle it.
+        const r = scene.renderer;
+        if (r && r.setClearColor) r.setClearColor(0x000000, 0);
       } catch {}
     });
 
-    anchorRaw.addEventListener("targetFound", () => {
+    // MindAR system events
+    scene.addEventListener("arReady", () => { hud.textContent = "AR: READY\nTARGET: scanning…"; });
+    scene.addEventListener("arError", (e) => {
+      const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
+      hud.textContent = "AR: ERROR\n" + msg;
+    });
+
+    anchor.addEventListener("targetFound", () => {
       modelEnt.setAttribute("visible", "true");
       hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
-    anchorRaw.addEventListener("targetLost", () => {
+    anchor.addEventListener("targetLost", () => {
       modelEnt.setAttribute("visible", "false");
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    modelEnt.addEventListener("model-loaded", () => {
-      hud.textContent += "\nGLB: LOADED";
-
-      // Safety: make sure the model itself is not set to transparent by import
-      const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) return;
-
-      mesh.traverse(o => {
-        if (!o.material) return;
-
-        // keep it opaque
-        o.material.transparent = false;
-        o.material.opacity = 1;
-
-        // write depth so it doesn't look “see-through”
-        o.material.depthWrite = true;
-        o.material.depthTest = true;
-
-        o.material.needsUpdate = true;
-      });
-    });
-
-    modelEnt.addEventListener("model-error", () => {
-      hud.textContent += "\nGLB: ERROR";
-    });
+    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
+    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
   </script>
 </body>
 </html>
