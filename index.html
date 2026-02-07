@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2 visible debug)</title>
+  <title>MindAR + GLB (targets2 stable)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -30,9 +30,50 @@
       white-space:pre-line;
       z-index:9999;
       user-select:none; -webkit-user-select:none;
-      max-width: calc(100vw - 20px);
     }
   </style>
+
+  <script>
+    // Smooth-follow component: lerpt position + quaternion + scale
+    AFRAME.registerComponent('smooth-follow', {
+      schema: {
+        target: { type: 'selector' },
+        posLerp: { type: 'number', default: 0.18 },   // kleiner = stabiler, aber träger
+        rotLerp: { type: 'number', default: 0.12 },
+        sclLerp: { type: 'number', default: 0.18 }
+      },
+      init() {
+        this.v3 = new THREE.Vector3();
+        this.v3b = new THREE.Vector3();
+        this.q = new THREE.Quaternion();
+        this.qb = new THREE.Quaternion();
+      },
+      tick() {
+        const t = this.data.target;
+        if (!t) return;
+
+        const a = this.el.object3D;
+        const b = t.object3D;
+
+        // position
+        b.getWorldPosition(this.v3b);
+        a.getWorldPosition(this.v3);
+        this.v3.lerp(this.v3b, this.data.posLerp);
+        a.parent.worldToLocal(this.v3);
+        a.position.copy(this.v3);
+
+        // rotation
+        b.getWorldQuaternion(this.qb);
+        a.getWorldQuaternion(this.q);
+        this.q.slerp(this.qb, this.data.rotLerp);
+        a.quaternion.copy(this.q);
+
+        // scale (optional)
+        b.getWorldScale(this.v3b);
+        a.scale.lerp(this.v3b, this.data.sclLerp);
+      }
+    });
+  </script>
 </head>
 
 <body>
@@ -47,10 +88,10 @@
         autoStart: true;
         uiLoading: true;
         uiScanning: true;
-        filterMinCF: 0.001;
-        filterBeta: 0.01;
+        filterMinCF: 0.0005;
+        filterBeta: 0.02;
       "
-      renderer="colorManagement:true"
+      renderer="colorManagement:true; antialias:true; alpha:true"
       vr-mode-ui="enabled:false"
       device-orientation-permission-ui="enabled:false"
     >
@@ -61,20 +102,15 @@
       <a-entity light="type: ambient; intensity: 1.6"></a-entity>
       <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
-      <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+      <!-- MindAR raw anchor -->
+      <a-entity id="anchorRaw" mindar-image-target="targetIndex: 0">
+        <!-- Dummy marker entity (not visible) -->
+        <a-entity id="poseRaw" position="0 0 0" rotation="0 0 0"></a-entity>
+      </a-entity>
 
-        <!-- Referenzfläche: wenn du DIE siehst, stimmt dein Anchor -->
-        <a-plane
-          id="ref"
-          position="0 0 0.001"
-          rotation="0 0 0"
-          width="1.2"
-          height="0.6"
-          material="color: #ffffff; opacity: 0.12; transparent: true; side: double;"
-          visible="false"
-        ></a-plane>
-
-        <!-- Modell: leicht vor der Fläche -->
+      <!-- Smoothed anchor that follows the raw one -->
+      <a-entity id="anchorSmooth" smooth-follow="target: #anchorRaw; posLerp: 0.18; rotLerp: 0.12; sclLerp: 0.18">
+        <!-- model slightly in front of surface -->
         <a-entity
           id="modelEnt"
           gltf-model="#model"
@@ -83,7 +119,6 @@
           rotation="0 0 0"
           scale="0.75 0.75 0.75"
         ></a-entity>
-
       </a-entity>
 
       <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
@@ -98,64 +133,35 @@
 
     const hud = document.getElementById("hud");
     const scene = document.getElementById("scene");
-    const anchor = document.getElementById("anchor");
+    const anchorRaw = document.getElementById("anchorRaw");
     const modelEnt = document.getElementById("modelEnt");
-    const ref = document.getElementById("ref");
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
       try {
-        const r = scene.renderer;
-        if (r && r.setClearColor) r.setClearColor(0x000000, 0);
+        // lower pixel ratio for stability/perf (less jitter)
+        scene.renderer.setPixelRatio(Math.min(1.25, window.devicePixelRatio || 1));
+        scene.renderer.setClearColor(0x000000, 0);
       } catch {}
     });
 
-    anchor.addEventListener("targetFound", () => {
-      ref.setAttribute("visible", "true");
+    anchorRaw.addEventListener("targetFound", () => {
       modelEnt.setAttribute("visible", "true");
       hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
-    anchor.addEventListener("targetLost", () => {
-      ref.setAttribute("visible", "false");
+    anchorRaw.addEventListener("targetLost", () => {
       modelEnt.setAttribute("visible", "false");
       hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    // Wenn das Modell geladen ist, Material auf "immer sichtbar" stellen (hilft bei Z-fighting / Occlusion)
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
-
-      const obj = modelEnt.getObject3D("mesh");
-      if (!obj) {
-        hud.textContent += "\nGLB: mesh missing";
-        return;
-      }
-
-      obj.traverse((n) => {
-        if (n.isMesh && n.material) {
-          const mats = Array.isArray(n.material) ? n.material : [n.material];
-          mats.forEach((m) => {
-            m.depthTest = false;
-            m.depthWrite = false;
-            m.side = THREE.DoubleSide;
-            m.needsUpdate = true;
-          });
-        }
-      });
-
-      hud.textContent += "\nGLB: material tweaked";
     });
 
     modelEnt.addEventListener("model-error", () => {
       hud.textContent += "\nGLB: ERROR";
     });
-
-    // targets2 Check
-    fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => { hud.textContent += "\nTARGETS2: OK"; })
-      .catch(e => { hud.textContent += "\nTARGETS2: FAIL (" + e.message + ")"; });
   </script>
 </body>
 </html>
