@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Scale + Perspective</title>
+  <title>MindAR + GLB (targets2.mind) + stronger scale + safe perspective</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,15 +42,25 @@
   </style>
 
   <script>
-    // 1) Scale: stärkerer Effekt, aber nicht "kaputt-extrem"
+    // --- HUD safe logger + error trap (so du siehst sofort, falls JS crasht)
+    function hudLog(msg){
+      const hud = document.getElementById("hud");
+      if (!hud) return;
+      hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + msg;
+    }
+    window.addEventListener("error", (e) => {
+      hudLog("JS ERROR: " + (e.message || "unknown"));
+    });
+
+    // 1) Scale by distance, BUT with a safe non-linear curve for bigger jumps
     AFRAME.registerComponent("scale-by-distance", {
       schema: {
-        target:   { type: "selector" },
+        target:   { type: "selector" }, // e.g. #anchor
         minScale: { type: "number", default: 2.0 }, // far
-        maxScale: { type: "number", default: 5.0 }, // near (deutlich stärker, aber safe)
+        maxScale: { type: "number", default: 5.2 }, // near (deutlich stärker, aber safe)
         minDist:  { type: "number", default: 0.35 },
         maxDist:  { type: "number", default: 1.60 },
-        power:    { type: "number", default: 2.2 }, // macht "Sprünge" stärker ohne Chaos
+        power:    { type: "number", default: 2.3 }, // stärkere Sprünge ohne Eskalation
         lerp:     { type: "number", default: 0.30 }
       },
 
@@ -71,14 +81,10 @@
 
         const dist = this.vCam.distanceTo(this.vTar);
 
-        // normalize 0..1 (0 near, 1 far)
         let n = (dist - this.data.minDist) / (this.data.maxDist - this.data.minDist);
         n = THREE.MathUtils.clamp(n, 0, 1);
 
-        // invert so near => 1
-        n = 1 - n;
-
-        // non-linear for stronger perceived jumps
+        n = 1 - n;               // near => 1
         n = Math.pow(n, this.data.power);
 
         const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, n);
@@ -89,21 +95,21 @@
       }
     });
 
-    // 2) Perspective-Flucht: extra tilt basierend auf Blickwinkel
-    // WICHTIG: das kommt auf ein eigenes Rig (tiltRig), NICHT auf den Offset.
-    AFRAME.registerComponent("perspective-tilt", {
+    // 2) Safe "perspective flucht" WITHOUT rotating (so it cannot swing out of view)
+    // It compresses X/Y based on how oblique the view is -> reads like tapering in perspective.
+    AFRAME.registerComponent("safe-flucht", {
       schema: {
-        anchor:   { type: "selector" },             // #anchor
-        strength: { type: "number", default: 1.25 },// moderat, sicher
-        maxDeg:   { type: "number", default: 22 },  // moderat clamp
-        lerp:     { type: "number", default: 0.30 }
+        anchor: { type: "selector" },              // #anchor
+        amount: { type: "number", default: 0.55 }, // stronger = more taper
+        max:    { type: "number", default: 0.60 }, // max compression
+        lerp:   { type: "number", default: 0.30 }
       },
 
       init() {
         this.vCamW = new THREE.Vector3();
         this.vCamL = new THREE.Vector3();
-        this.curX = 0; // degrees
-        this.curY = 0; // degrees
+        this.curX = 1;
+        this.curY = 1;
       },
 
       tick() {
@@ -112,25 +118,26 @@
         if (!cam || !anchorEl) return;
 
         cam.getWorldPosition(this.vCamW);
-
-        // camera position in anchor local space
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
+        // angles in radians
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
-        let ty = THREE.MathUtils.radToDeg(yaw)   * this.data.strength;
-        let tx = THREE.MathUtils.radToDeg(-pitch)* this.data.strength;
+        // use absolute obliqueness (0..~)
+        const obX = Math.min(Math.abs(yaw)   / (Math.PI/3), 1); // normalize to ~60°
+        const obY = Math.min(Math.abs(pitch) / (Math.PI/3), 1);
 
-        tx = THREE.MathUtils.clamp(tx, -this.data.maxDeg, this.data.maxDeg);
-        ty = THREE.MathUtils.clamp(ty, -this.data.maxDeg, this.data.maxDeg);
+        // compression factors (1 down to 1-max)
+        const targetX = 1 - THREE.MathUtils.clamp(obX * this.data.amount, 0, this.data.max);
+        const targetY = 1 - THREE.MathUtils.clamp(obY * this.data.amount, 0, this.data.max);
 
-        this.curX = THREE.MathUtils.lerp(this.curX, tx, this.data.lerp);
-        this.curY = THREE.MathUtils.lerp(this.curY, ty, this.data.lerp);
+        this.curX = THREE.MathUtils.lerp(this.curX, targetX, this.data.lerp);
+        this.curY = THREE.MathUtils.lerp(this.curY, targetY, this.data.lerp);
 
-        // set rotation via attribute (degrees) = stabil in A-Frame
-        this.el.setAttribute("rotation", `${this.curX} ${this.curY} 0`);
+        // apply ONLY anisotropic scale -> no swinging out of frame
+        this.el.object3D.scale.set(this.curX, this.curY, 1);
       }
     });
   </script>
@@ -166,13 +173,12 @@
         <a-entity id="surface" position="0 0 0.01">
           <a-entity id="offset" position="0 0 0">
 
-            <!-- HIER ist der Fix: Offset (-1) ist ein Parent -->
+            <!-- Dein funktionierender Offset bleibt EXACT so: -->
             <a-entity id="placeRig" position="-1 0 0">
 
-              <!-- Tilt passiert NACH dem Offset, also schwen_togglelt nichts weg -->
-              <a-entity id="tiltRig" perspective-tilt="anchor:#anchor; strength:1.25; maxDeg:22; lerp:0.30">
+              <!-- Flucht wirkt als "sicherer" Effekt auf Parent (nur Scale X/Y) -->
+              <a-entity id="fluchtRig" safe-flucht="anchor:#anchor; amount:0.55; max:0.60; lerp:0.30">
 
-                <!-- Modell bleibt bei 0 0 0 -->
                 <a-entity
                   id="modelEnt"
                   gltf-model="#model"
@@ -183,10 +189,10 @@
                   scale-by-distance="
                     target: #anchor;
                     minScale: 2.0;
-                    maxScale: 5.0;
+                    maxScale: 5.2;
                     minDist: 0.35;
                     maxDist: 1.60;
-                    power: 2.2;
+                    power: 2.3;
                     lerp: 0.30
                   "
                 ></a-entity>
@@ -203,6 +209,7 @@
   </div>
 
   <script>
+    // iOS dynamic viewport height fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
@@ -217,6 +224,7 @@
       hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + line;
     }
 
+    // Quick check: ist targets2.mind erreichbar?
     fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
       .then(() => { log("TARGETS2: OK"); })
@@ -249,7 +257,7 @@
     modelEnt.addEventListener("model-loaded", () => {
       log("GLB: LOADED");
 
-      // wichtig: beim Kippen nicht von hinten verschwinden
+      // Keep it visible from all sides (sicher)
       const mesh = modelEnt.getObject3D("mesh");
       if (!mesh) { log("MESH: missing"); return; }
 
