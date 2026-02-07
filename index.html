@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB – Debug (FOUND aber nichts sichtbar)</title>
+  <title>MindAR + GLB (targets2.mind) + Scale-by-Distance</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,38 +42,44 @@
   </style>
 
   <script>
-    // Überzeichnete perspektivische Verjüngung beim schrägen Blick
-    AFRAME.registerComponent("perspective-tilt", {
+    // Scales an entity based on camera <-> target distance, with smoothing (lerp).
+    AFRAME.registerComponent("scale-by-distance", {
       schema: {
-        anchor:   { type: "selector" },
-        strength: { type: "number", default: 1.6 },
-        maxDeg:   { type: "number", default: 35 },
-        lerp:     { type: "number", default: 0.30 }
+        target:   { type: "selector" }, // e.g. #anchor
+        minScale: { type: "number", default: 2.0 }, // far
+        maxScale: { type: "number", default: 3.5 }, // near
+        minDist:  { type: "number", default: 0.35 }, // near distance
+        maxDist:  { type: "number", default: 1.60 }, // far distance
+        lerp:     { type: "number", default: 0.30 }  // smoothing (requested)
       },
+
       init() {
-        this.vCamW = new THREE.Vector3();
-        this.vCamL = new THREE.Vector3();
+        this.vCam = new THREE.Vector3();
+        this.vTar = new THREE.Vector3();
+        this.vGoal = new THREE.Vector3(1, 1, 1);
+        this.vCur  = new THREE.Vector3(1, 1, 1);
       },
+
       tick() {
+        const t = this.data.target;
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        const anchorEl = this.data.anchor;
-        if (!cam || !anchorEl) return;
+        if (!t || !cam) return;
 
-        cam.getWorldPosition(this.vCamW);
-        this.vCamL.copy(this.vCamW);
-        anchorEl.object3D.worldToLocal(this.vCamL);
+        cam.getWorldPosition(this.vCam);
+        t.object3D.getWorldPosition(this.vTar);
 
-        const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
-        const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
+        const dist = this.vCam.distanceTo(this.vTar);
 
-        const max = THREE.MathUtils.degToRad(this.data.maxDeg);
+        // clamp distance into [minDist, maxDist]
+        const d = THREE.MathUtils.clamp(dist, this.data.minDist, this.data.maxDist);
 
-        const ry = THREE.MathUtils.clamp(yaw * this.data.strength,     -max, max);
-        const rx = THREE.MathUtils.clamp(-pitch * this.data.strength,  -max, max);
+        // map distance -> scale (invert so near => bigger)
+        const u = 1 - (d - this.data.minDist) / (this.data.maxDist - this.data.minDist);
+        const s = THREE.MathUtils.lerp(this.data.minScale, this.data.maxScale, u);
 
-        const r = this.el.object3D.rotation;
-        r.x = THREE.MathUtils.lerp(r.x, rx, this.data.lerp);
-        r.y = THREE.MathUtils.lerp(r.y, ry, this.data.lerp);
+        this.vGoal.set(s, s, s);
+        this.vCur.lerp(this.vGoal, this.data.lerp);
+        this.el.object3D.scale.copy(this.vCur);
       }
     });
   </script>
@@ -98,37 +104,35 @@
       vr-mode-ui="enabled:false"
       device-orientation-permission-ui="enabled:false"
     >
+      <a-assets>
+        <a-asset-item id="model" src="/QR-CODE/enno6_test.glb"></a-asset-item>
+      </a-assets>
+
       <a-entity light="type: ambient; intensity: 1.2"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
+      <!-- Wenn targets2.mind nur 1 Target enthält: targetIndex 0 -->
       <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+        <!-- minimal vor die Fläche, damit kein Flimmern -->
         <a-entity id="surface" position="0 0 0.01">
-          <a-entity id="placeRig" position="-1 0 0">
-
+          <!-- optionaler Offset -->
+          <a-entity id="offset" position="0 0 0">
             <a-entity
-              id="tiltRig"
-              perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
-            >
-              <!-- TEST: Wird 3D überhaupt sichtbar? -->
-              <a-box
-                id="testBox"
-                visible="false"
-                position="0 0 0.03"
-                depth="0.05" height="0.05" width="0.05"
-                material="color:#ff0000; opacity:0.95"
-              ></a-box>
-
-              <!-- GLB direkt laden (ohne a-assets) -->
-              <a-entity
-                id="modelEnt"
-                gltf-model="/QR-CODE/enno6_test.glb"
-                visible="false"
-                position="0 0 0.03"
-                rotation="0 0 0"
-                scale="2.75 2.75 2.75"
-              ></a-entity>
-            </a-entity>
-
+              id="modelEnt"
+              gltf-model="#model"
+              visible="false"
+              position="-1 0 0"
+              rotation="0 0 0"
+              scale="2.75 2.75 2.75"
+              scale-by-distance="
+                target: #anchor;
+                minScale: 2.0;
+                maxScale: 3.5;
+                minDist: 0.35;
+                maxDist: 1.60;
+                lerp: 0.30
+              "
+            ></a-entity>
           </a-entity>
         </a-entity>
       </a-entity>
@@ -138,6 +142,7 @@
   </div>
 
   <script>
+    // iOS dynamic viewport height fix
     function setVH(){ document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
     setVH();
     window.addEventListener('resize', setVH);
@@ -147,23 +152,12 @@
     const scene = document.getElementById("scene");
     const anchor = document.getElementById("anchor");
     const modelEnt = document.getElementById("modelEnt");
-    const testBox = document.getElementById("testBox");
 
-    function log(line){
-      hud.textContent = (hud.textContent ? hud.textContent + "\n" : "") + line;
-    }
-
-    // check targets file reachable
+    // Quick check: ist targets2.mind erreichbar?
     fetch("/QR-CODE/targets2.mind", { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => log("TARGETS2: OK"))
-      .catch(e => log("TARGETS2: FAIL (" + e.message + ")"));
-
-    // check glb reachable (important)
-    fetch("/QR-CODE/enno6_test.glb", { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-      .then(() => log("GLB FETCH: OK"))
-      .catch(e => log("GLB FETCH: FAIL (" + e.message + ")"));
+      .then(() => { hud.textContent += "\nTARGETS2: OK"; })
+      .catch(e => { hud.textContent += "\nTARGETS2: FAIL (" + e.message + ")"; });
 
     scene.addEventListener("loaded", () => {
       hud.textContent = "SCENE: loaded\nTARGET: scanning…";
@@ -173,48 +167,25 @@
       } catch {}
     });
 
-    scene.addEventListener("arReady", () => log("AR: READY"));
+    // MindAR system events
+    scene.addEventListener("arReady", () => { hud.textContent = "AR: READY\nTARGET: scanning…"; });
     scene.addEventListener("arError", (e) => {
       const msg = (e && e.detail) ? JSON.stringify(e.detail) : "unknown";
-      log("AR: ERROR " + msg);
+      hud.textContent = "AR: ERROR\n" + msg;
     });
 
     anchor.addEventListener("targetFound", () => {
-      log("TARGET: FOUND");
-      testBox.setAttribute("visible", "true");   // wenn du den roten Würfel siehst: 3D ok
-      modelEnt.setAttribute("visible", "true");  // Modell an
+      modelEnt.setAttribute("visible", "true");
+      hud.textContent = "TARGET: FOUND\nMODEL: visible";
     });
 
     anchor.addEventListener("targetLost", () => {
-      log("TARGET: LOST");
-      testBox.setAttribute("visible", "false");
       modelEnt.setAttribute("visible", "false");
+      hud.textContent = "TARGET: LOST\nMODEL: hidden";
     });
 
-    modelEnt.addEventListener("model-loaded", () => {
-      log("GLB: LOADED");
-
-      const mesh = modelEnt.getObject3D("mesh");
-      if (!mesh) { log("MESH: missing"); return; }
-
-      mesh.traverse(o => {
-        if (!o.isMesh || !o.material) return;
-        o.frustumCulled = false;
-        o.material.side = THREE.DoubleSide;
-        o.material.transparent = false;
-        o.material.opacity = 1;
-        o.material.depthWrite = true;
-        o.material.depthTest = true;
-        o.material.needsUpdate = true;
-      });
-
-      log("MATERIAL: DoubleSide");
-    });
-
-    modelEnt.addEventListener("model-error", (e) => {
-      log("GLB: ERROR");
-      try { log("DETAIL: " + JSON.stringify(e.detail)); } catch {}
-    });
+    modelEnt.addEventListener("model-loaded", () => { hud.textContent += "\nGLB: LOADED"; });
+    modelEnt.addEventListener("model-error",  () => { hud.textContent += "\nGLB: ERROR";  });
   </script>
 </body>
 </html>
