@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MindAR + GLB (targets2.mind) + Perspective Tilt</title>
+  <title>MindAR + GLB (targets2.mind) + Tilt</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -42,13 +42,13 @@
   </style>
 
   <script>
-    // Extra tilt based on viewing angle (exaggerated perspective)
+    // Überzeichnete Perspektive beim schrägen Draufschauen (lerp = 0.3)
     AFRAME.registerComponent("perspective-tilt", {
       schema: {
-        anchor:   { type: "selector" },            // #anchor
-        strength: { type: "number", default: 1.6 },// mehr = stärkere Verjüngung
-        maxDeg:   { type: "number", default: 35 }, // clamp
-        lerp:     { type: "number", default: 0.30 }// smoothing
+        anchor:   { type: "selector" },
+        strength: { type: "number", default: 1.6 },
+        maxDeg:   { type: "number", default: 35 },
+        lerp:     { type: "number", default: 0.30 }
       },
       init() {
         this.vCamW = new THREE.Vector3();
@@ -65,7 +65,7 @@
         this.vCamL.copy(this.vCamW);
         anchorEl.object3D.worldToLocal(this.vCamL);
 
-        // Winkel relativ zur Target-Normale
+        // Blickwinkel relativ zur Target-Normale
         const yaw   = Math.atan2(this.vCamL.x, -this.vCamL.z);
         const pitch = Math.atan2(this.vCamL.y, -this.vCamL.z);
 
@@ -112,8 +112,10 @@
         <a-entity id="surface" position="0 0 0.01">
           <a-entity id="offset" position="0 0 0">
 
-            <!-- WICHTIG: Offset/Placement zuerst, dann Tilt -->
+            <!-- 1) Erst Position wie bei dir -->
             <a-entity id="placeRig" position="-5 0 0">
+
+              <!-- 2) Dann nur Rotation/Verjüngung (beeinflusst die Position nicht mehr) -->
               <a-entity
                 id="tiltRig"
                 perspective-tilt="anchor:#anchor; strength:1.6; maxDeg:35; lerp:0.3"
@@ -122,11 +124,12 @@
                   id="modelEnt"
                   gltf-model="#model"
                   visible="false"
-                  position="0 0 0.03"
+                  position="0 0 0"
                   rotation="0 0 0"
                   scale="2.75 2.75 2.75"
                 ></a-entity>
               </a-entity>
+
             </a-entity>
 
           </a-entity>
@@ -180,22 +183,21 @@
     modelEnt.addEventListener("model-loaded", () => {
       hud.textContent += "\nGLB: LOADED";
 
-      // Wichtig bei zusätzlichem Tilt: sonst verschwindet es beim Blick "von hinten"
+      // Wichtig: beim Kippen kann man “von hinten” drauf schauen → DoubleSide
       const mesh = modelEnt.getObject3D("mesh");
       if (!mesh) return;
 
       mesh.traverse(o => {
         if (!o.isMesh || !o.material) return;
 
-        // keine Backface-Überraschungen + kein Culling
-        o.frustumCulled = false;
-        o.material.side = THREE.DoubleSide;
+        o.frustumCulled = false;            // zur Sicherheit
+        o.material.side = THREE.DoubleSide; // nicht unsichtbar von hinten
 
-        // solide
         o.material.transparent = false;
         o.material.opacity = 1;
         o.material.depthWrite = true;
         o.material.depthTest = true;
+
         o.material.needsUpdate = true;
       });
     });
@@ -204,3 +206,4 @@
   </script>
 </body>
 </html>
+
