@@ -3,178 +3,302 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AR – Pattern Marker (Stable HUD)</title>
+  <title>QR → GLB Overlay (Web)</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 
   <style>
-    html, body { margin:0; padding:0; background:#000; overflow:hidden; font-family:-apple-system,system-ui,sans-serif; }
+    html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:-apple-system,system-ui,sans-serif; }
     #start {
-      position: fixed; inset: 0;
-      display: grid; place-items: center;
-      background: #000; color:#fff; z-index: 10;
+      position:fixed; inset:0; display:grid; place-items:center;
+      background:rgba(0,0,0,.85); color:#fff; z-index:10;
     }
-    #btn {
-      padding: 14px 18px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.35);
-      background: rgba(255,255,255,.12);
-    }
-    #hud{
-      position: fixed; top:10px; left:10px;
-      padding: 8px 10px;
-      background: rgba(0,0,0,.65);
-      color:#fff; font-size: 13px;
-      border-radius: 6px;
-      white-space: pre-line;
-      z-index: 20;
+    #btn { padding:14px 18px; border-radius:12px; border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12); }
+    #hud {
+      position:fixed; top:10px; left:10px; padding:8px 10px;
+      background:rgba(0,0,0,.65); color:#fff; font-size:13px;
+      border-radius:6px; white-space:pre-line; z-index:20;
       user-select:none; -webkit-user-select:none;
+      max-width: calc(100vw - 20px);
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    #video {
+      position:fixed; inset:0; width:100vw; height:100vh;
+      object-fit:cover; background:#000; z-index:0;
+    }
+    #aframeWrap {
+      position:fixed; inset:0; z-index:1; pointer-events:none;
     }
   </style>
 </head>
 
 <body>
-  <div id="start"><div id="btn">Start AR</div></div>
+  <div id="start"><div id="btn">Start Kamera</div></div>
   <div id="hud">WAITING FOR TAP</div>
 
+  <video id="video" playsinline webkit-playsinline muted></video>
+
+  <div id="aframeWrap">
+    <a-scene
+      embedded
+      vr-mode-ui="enabled:false"
+      renderer="alpha:true; antialias:true; colorManagement:true"
+      background="transparent: true"
+    >
+      <a-assets>
+        <!-- Pfad an dein GitHub Pages Repo angepasst -->
+        <a-asset-item id="model" src="/QR-CODE/enno6_test.glb?v=1"></a-asset-item>
+      </a-assets>
+
+      <a-entity light="type: ambient; intensity: 1.2"></a-entity>
+      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+
+      <!-- Modell (wird per JS positioniert) -->
+      <a-entity
+        id="modelEnt"
+        gltf-model="#model"
+        visible="false"
+        position="0 0 -2"
+        rotation="0 0 0"
+        scale="1 1 1"
+      ></a-entity>
+
+      <a-entity id="cam" camera position="0 0 0"></a-entity>
+    </a-scene>
+  </div>
+
   <script>
-    const HUD = document.getElementById("hud");
-    const START = document.getElementById("start");
+    const BASE = "/QR-CODE"; // falls dein Repo anders heißt, hier ändern
+    const hud = document.getElementById("hud");
+    const start = document.getElementById("start");
+    const btn = document.getElementById("btn");
+    const video = document.getElementById("video");
 
-    const BASE = "/QR-CODE"; // <- Repo-Pfad auf GitHub Pages
-    const PATT_URL = `${BASE}/patternbw.patt?v=7`; // v hochzählen bei Änderungen (iOS Cache!)
-    const MODEL_URL = `${BASE}/enno6_test.glb?v=7`;
+    const modelEnt = document.getElementById("modelEnt");
+    const camEl = document.getElementById("cam");
 
-    let state = {
-      boot: "waiting",
-      scene: "…",
-      arjs: "…",
-      video: "…",
-      patt: "…",
-      marker: "waiting",
-      model: "loading…"
+    // ZXing
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+
+    let scanning = false;
+    let lastText = "";
+    let lastFoundAt = 0;
+
+    // Glättung
+    let smooth = {
+      x: 0, y: 0, z: -2,
+      s: 1,
+      yaw: 0
     };
 
-    function renderHUD() {
-      HUD.textContent = [
-        `BOOT: ${state.boot}`,
-        `SCENE: ${state.scene}`,
-        `ARJS: ${state.arjs}`,
-        `VIDEO: ${state.video}`,
-        `PATT: ${state.patt}`,
-        `MARKER: ${state.marker}`,
-        `MODEL: ${state.model}`,
-      ].join("\n");
+    function setHUD(lines) {
+      hud.textContent = lines.join("\n");
     }
 
-    document.getElementById("btn").addEventListener("click", () => {
-      START.remove();
-      state.boot = "init…";
-      renderHUD();
-      initAR();
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+    }
+
+    // Objekt-fit: cover Mapping (Video-Pixel -> Screen-Pixel)
+    function videoToScreenMapper() {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const sw = window.innerWidth, sh = window.innerHeight;
+
+      const scale = Math.max(sw / vw, sh / vh);
+      const dispW = vw * scale;
+      const dispH = vh * scale;
+      const offX = (sw - dispW) / 2;
+      const offY = (sh - dispH) / 2;
+
+      return (x, y) => ({ x: x * scale + offX, y: y * scale + offY });
+    }
+
+    // Aus ResultPoints (meist 3 Punkte beim QR) eine grobe Box ableiten
+    function approxQuadFromPoints(points) {
+      let minX=1e9, minY=1e9, maxX=-1e9, maxY=-1e9;
+      for (const p of points) {
+        minX = Math.min(minX, p.getX());
+        minY = Math.min(minY, p.getY());
+        maxX = Math.max(maxX, p.getX());
+        maxY = Math.max(maxY, p.getY());
+      }
+      const size = Math.max(maxX - minX, maxY - minY);
+      const pad = 0.15 * size;
+      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+
+      // tl,tr,br,bl in Video-Koordinaten
+      return {
+        tl: {x:minX, y:minY},
+        tr: {x:maxX, y:minY},
+        br: {x:maxX, y:maxY},
+        bl: {x:minX, y:maxY}
+      };
+    }
+
+    // Screen-Pixel -> A-Frame World auf Ebene z (negativ, vor der Kamera)
+    function screenToWorld(xPx, yPx, z) {
+      const camObj = camEl.getObject3D("camera");
+      if (!camObj) return { x: 0, y: 0, z };
+
+      const fov = (camObj.fov || 80) * Math.PI / 180;
+      const aspect = (window.innerWidth / window.innerHeight);
+
+      const ndcX = (xPx / window.innerWidth) * 2 - 1;
+      const ndcY = 1 - (yPx / window.innerHeight) * 2;
+
+      const halfH = Math.tan(fov / 2) * (-z);
+      const halfW = halfH * aspect;
+
+      return {
+        x: ndcX * halfW,
+        y: ndcY * halfH,
+        z
+      };
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function updateModelPose(centerScreen, qrScreenSize, yawDeg) {
+      // Ziel-Z
+      const targetZ = -2.0;
+
+      // Position
+      const p = screenToWorld(centerScreen.x, centerScreen.y, targetZ);
+
+      // Skalierung: aus QR-Größe abgeleitet (heuristisch)
+      // qrScreenSize ist Pixel-Kantenlänge (ungefähr)
+      const s = Math.max(0.2, Math.min(3.5, qrScreenSize / 260)); // 260px ≈ scale 1
+
+      // Glätten
+      const t = 0.22;
+      smooth.x = lerp(smooth.x, p.x, t);
+      smooth.y = lerp(smooth.y, p.y, t);
+      smooth.z = lerp(smooth.z, targetZ, t);
+      smooth.s = lerp(smooth.s, s, t);
+
+      // Yaw grob glätten (wrap egal, weil klein)
+      smooth.yaw = lerp(smooth.yaw, yawDeg, 0.18);
+
+      modelEnt.setAttribute("position", `${smooth.x} ${smooth.y} ${smooth.z}`);
+      modelEnt.setAttribute("scale", `${smooth.s} ${smooth.s} ${smooth.s}`);
+
+      // Rotation: wir drehen nur um Y als “billiges” Kleben (wir haben keine echte Pose)
+      modelEnt.setAttribute("rotation", `0 ${smooth.yaw} 0`);
+    }
+
+    function showModel(text) {
+      if (text !== lastText) {
+        lastText = text;
+      }
+      modelEnt.setAttribute("visible", "true");
+    }
+
+    function hideModel() {
+      modelEnt.setAttribute("visible", "false");
+    }
+
+    async function scanLoop() {
+      if (!scanning) return;
+
+      try {
+        const result = await codeReader.decodeOnceFromVideoElement(video);
+        const text = result.getText();
+        const pts = result.getResultPoints() || [];
+        lastFoundAt = performance.now();
+
+        showModel(text);
+
+        // Quad approx → Screen
+        const quadV = approxQuadFromPoints(pts);
+        const map = videoToScreenMapper();
+
+        const tl = map(quadV.tl.x, quadV.tl.y);
+        const tr = map(quadV.tr.x, quadV.tr.y);
+        const br = map(quadV.br.x, quadV.br.y);
+        const bl = map(quadV.bl.x, quadV.bl.y);
+
+        const center = {
+          x: (tl.x + tr.x + br.x + bl.x) / 4,
+          y: (tl.y + tr.y + br.y + bl.y) / 4
+        };
+
+        const w = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+        const h = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+        const size = Math.max(w, h);
+
+        // grobe Orientierung aus Oberkante
+        const yaw = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+
+        updateModelPose(center, size, yaw);
+
+        setHUD([
+          "CAMERA: OK",
+          "QR: FOUND",
+          "TEXT: " + (text.length > 60 ? text.slice(0,60) + "…" : text),
+          "MODEL: visible"
+        ]);
+
+      } catch (e) {
+        // ignore: ZXing wirft oft, wenn gerade nix gefunden wird
+      }
+
+      // Lost: wenn länger nix gefunden -> Modell ausblenden
+      const now = performance.now();
+      if (now - lastFoundAt > 700) {
+        hideModel();
+        setHUD(["CAMERA: OK", "QR: scanning…", "MODEL: hidden"]);
+      }
+
+      // throttle: ca. 10 FPS (auf iPhone stabil)
+      setTimeout(scanLoop, 100);
+    }
+
+    btn.addEventListener("click", async () => {
+      start.remove();
+      setHUD(["CAMERA: starting…"]);
+      await startCamera();
+
+      // iOS: nochmal play anstoßen
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.muted = true;
+      video.play().catch(()=>{});
+
+      scanning = true;
+      lastFoundAt = 0;
+      setHUD(["CAMERA: OK", "QR: scanning…", "MODEL: loading…"]);
+
+      // Modellstatus in HUD
+      modelEnt.addEventListener("model-loaded", () => {
+        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("MODEL:"));
+        lines.push("MODEL: LOADED");
+        hud.textContent = lines.join("\n");
+      });
+      modelEnt.addEventListener("model-error", () => {
+        const lines = hud.textContent.split("\n").filter(l => !l.startsWith("MODEL:"));
+        lines.push("MODEL: ERROR");
+        hud.textContent = lines.join("\n");
+      });
+
+      scanLoop();
     });
 
-    async function checkPattFetch() {
-      try {
-        const r = await fetch(PATT_URL, { cache: "no-store" });
-        if (!r.ok) {
-          state.patt = `HTTP ${r.status}`;
-          renderHUD();
-          return;
-        }
-        const txt = await r.text();
-        state.patt = `OK (${txt.length})`;
-        renderHUD();
-      } catch (e) {
-        state.patt = "FETCH ERROR";
-        renderHUD();
-      }
-    }
-
-    function initAR() {
-      // Vorab: prüfen ob .patt überhaupt erreichbar ist
-      checkPattFetch();
-
-      const scene = document.createElement("a-scene");
-      scene.setAttribute("embedded", "");
-      scene.setAttribute("vr-mode-ui", "enabled:false");
-      scene.setAttribute("renderer", "colorManagement:true");
-      scene.setAttribute(
-        "arjs",
-        "sourceType: webcam; videoTexture:true; trackingMethod:best; debugUIEnabled:false;"
-      );
-
-      scene.innerHTML = `
-        <a-assets>
-          <a-asset-item id="model" src="${MODEL_URL}"></a-asset-item>
-        </a-assets>
-
-        <a-marker id="marker" type="pattern" url="${PATT_URL}">
-          <a-entity light="type: ambient; intensity: 1.5"></a-entity>
-          <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-          <!-- Debug-Würfel -->
-          <a-box position="0 0.25 0" depth="0.25" height="0.25" width="0.25"></a-box>
-
-          <!-- Modell -->
-          <a-entity id="modelEnt" gltf-model="#model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-entity>
-        </a-marker>
-
-        <a-entity camera look-controls="enabled:false" wasd-controls="enabled:false"></a-entity>
-      `;
-
-      document.body.appendChild(scene);
-
-      scene.addEventListener("loaded", () => {
-        state.boot = "ok";
-        state.scene = "loaded";
-        state.arjs = (scene.systems && scene.systems["arjs"]) ? "present" : "missing";
-        renderHUD();
-
-        // iOS: Video prüfen + play anstoßen
-        setTimeout(() => {
-          const v = document.querySelector("video");
-          state.video = v ? "present" : "missing";
-          renderHUD();
-
-          if (v) {
-            v.setAttribute("playsinline", "");
-            v.setAttribute("webkit-playsinline", "");
-            v.muted = true;
-            v.play().catch(()=>{});
-          }
-        }, 500);
-
-        // Modellstatus
-        const modelEnt = document.getElementById("modelEnt");
-        if (modelEnt) {
-          modelEnt.addEventListener("model-loaded", () => { state.model = "LOADED"; renderHUD(); });
-          modelEnt.addEventListener("model-error",  () => { state.model = "ERROR";  renderHUD(); });
-        }
-
-        // Markerstatus: NICHT Events, sondern visible polling (zuverlässig)
-        const marker = document.getElementById("marker");
-        let last = null;
-
-        setInterval(() => {
-          const v = document.querySelector("video");
-          state.video = v ? "present" : "missing";
-
-          if (marker && marker.object3D) {
-            const vis = marker.object3D.visible;
-            if (vis !== last) {
-              last = vis;
-              state.marker = vis ? "FOUND" : "LOST";
-            }
-          } else {
-            state.marker = "missing";
-          }
-
-          renderHUD();
-        }, 250);
-      });
-    }
+    // falls Orientation/Resize
+    window.addEventListener("resize", () => {
+      // nichts, weil wir live map() über window.innerWidth/Height machen
+    });
   </script>
 </body>
 </html>
