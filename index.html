@@ -1,114 +1,164 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-<title>ENNO HAAR WASN'T HERE</title>
+  <title>ENNO HAAR WASN'T HERE</title>
 
-<meta property="og:title" content="ENNO HAAR WASN'T HERE">
-<meta name="apple-mobile-web-app-title" content="ENNO HAAR WASN'T HERE">
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
 
-<style>
-html,
-body{
-  margin:0;
-  padding:0;
-  width:100%;
-  height:100%;
-  overflow:hidden;
-  background:#000;
-}
+    :root {
+      --vh: 1vh;
+    }
 
-a-scene{
-  width:100%;
-  height:100%;
-}
+    #app {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: calc(var(--vh) * 100);
+      overflow: hidden;
+      background: #000;
+    }
 
-.mindar-ui-loading,
-.mindar-ui-scanning{
-  display:none !important;
-}
-</style>
+    a-scene {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: transparent !important;
+    }
+
+    .mindar-container,
+    .mindar-container video,
+    .mindar-container canvas,
+    canvas.a-canvas {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      background: transparent !important;
+    }
+
+    .mindar-ui-loading,
+    .mindar-ui-scanning {
+      display: none !important;
+    }
+
+    #hud {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      color: white;
+      background: rgba(0,0,0,.6);
+      padding: 8px;
+      border-radius: 6px;
+      font: 13px -apple-system, system-ui, sans-serif;
+      white-space: pre-line;
+    }
+  </style>
 </head>
 
 <body>
+<div id="app">
+  <div id="hud">LOADING…</div>
 
-<a-scene
-  embedded
-  color-space="sRGB"
-  renderer="alpha:true; antialias:true"
-  vr-mode-ui="enabled:false"
-  device-orientation-permission-ui="enabled:false"
+  <a-scene
+    id="scene"
+    embedded
+    mindar-image="
+      imageTargetSrc: ./targets2.mind;
+      autoStart:true;
+      uiLoading:false;
+      uiScanning:false;
+      filterMinCF:0.0005;
+      filterBeta:0.02;
+    "
+    renderer="alpha:true; antialias:true; colorManagement:true"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:false"
+  >
+    <a-assets>
+      <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
+    </a-assets>
 
-  mindar-image="
-    imageTargetSrc: ./targets2.mind;
-    autoStart:true;
-    uiLoading:false;
-    uiScanning:false;
-    filterMinCF:0.0005;
-    filterBeta:0.02;
-  "
->
+    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-<a-assets>
-  <a-asset-item
-    id="model"
-    src="./enno6_test.glb">
-  </a-asset-item>
-</a-assets>
+    <a-entity light="type: ambient; intensity: 1.6"></a-entity>
+    <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
-<a-camera
-  position="0 0 0"
-  look-controls="enabled:false">
-</a-camera>
-
-<a-entity
-  light="type:ambient; intensity:1.6">
-</a-entity>
-
-<a-entity
-  light="type:directional; intensity:1.2"
-  position="1 2 1">
-</a-entity>
-
-<a-entity
-  id="target"
-  mindar-image-target="targetIndex:0">
-
-  <a-entity
-    id="text"
-    gltf-model="#model"
-    visible="false"
-
-    position="-0.25 0 0.05"
-
-    rotation="0 0 0"
-
-    scale="1.6 1.6 1.6">
-  </a-entity>
-
-</a-entity>
-
-</a-scene>
+    <a-entity id="target" mindar-image-target="targetIndex:0">
+      <a-entity
+        id="text"
+        gltf-model="#model"
+        visible="false"
+        position="-0.25 0 0.05"
+        rotation="0 0 0"
+        scale="1.6 1.6 1.6">
+      </a-entity>
+    </a-entity>
+  </a-scene>
+</div>
 
 <script>
+  function setVH() {
+    document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
+  }
 
-const target = document.querySelector("#target");
-const text = document.querySelector("#text");
+  setVH();
+  window.addEventListener("resize", setVH);
+  window.addEventListener("orientationchange", () => setTimeout(setVH, 200));
 
-target.addEventListener("targetFound", () => {
-  text.setAttribute("visible", true);
-});
+  const hud = document.getElementById("hud");
+  const scene = document.getElementById("scene");
+  const target = document.getElementById("target");
+  const text = document.getElementById("text");
 
-target.addEventListener("targetLost", () => {
-  text.setAttribute("visible", false);
-});
+  scene.addEventListener("loaded", () => {
+    hud.textContent = "SCENE: loaded\nTARGET: scanning…";
+    try {
+      scene.renderer.setClearColor(0x000000, 0);
+    } catch(e) {}
+  });
 
+  scene.addEventListener("arReady", () => {
+    hud.textContent = "AR: ready\nTARGET: scanning…";
+  });
+
+  scene.addEventListener("arError", () => {
+    hud.textContent = "AR: error";
+  });
+
+  text.addEventListener("model-loaded", () => {
+    hud.textContent += "\nGLB: loaded";
+  });
+
+  text.addEventListener("model-error", () => {
+    hud.textContent += "\nGLB: error";
+  });
+
+  target.addEventListener("targetFound", () => {
+    text.setAttribute("visible", "true");
+    hud.textContent = "TARGET: found\nMODEL: visible";
+  });
+
+  target.addEventListener("targetLost", () => {
+    text.setAttribute("visible", "false");
+    hud.textContent = "TARGET: lost";
+  });
 </script>
-
 </body>
 </html>
