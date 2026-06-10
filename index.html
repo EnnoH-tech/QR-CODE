@@ -1,51 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-<title>MindAR Test</title>
+<title>ENNO HAAR WASN'T HERE</title>
+
+<meta property="og:title" content="ENNO HAAR WASN'T HERE">
+<meta name="apple-mobile-web-app-title" content="ENNO HAAR WASN'T HERE">
 
 <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
 <style>
-html,body{
+html,
+body{
   margin:0;
+  padding:0;
   width:100%;
   height:100%;
   overflow:hidden;
+  background:#000;
 }
 
-#hud{
-  position:fixed;
-  top:10px;
-  left:10px;
-  z-index:9999;
-  color:white;
-  background:rgba(0,0,0,.6);
-  padding:8px;
-  font-family:sans-serif;
+a-scene{
+  width:100%;
+  height:100%;
+}
+
+.mindar-ui-loading,
+.mindar-ui-scanning{
+  display:none !important;
 }
 </style>
 </head>
 
 <body>
 
-<div id="hud">
-loading...
-</div>
-
 <a-scene
-  id="scene"
   embedded
   color-space="sRGB"
-  renderer="alpha:true"
+  renderer="alpha:true; antialias:true"
   vr-mode-ui="enabled:false"
   device-orientation-permission-ui="enabled:false"
+
   mindar-image="
     imageTargetSrc: ./targets2.mind;
     autoStart:true;
+    uiLoading:false;
+    uiScanning:false;
+    filterMinCF:0.0005;
+    filterBeta:0.02;
   "
 >
 
@@ -56,7 +61,19 @@ loading...
   </a-asset-item>
 </a-assets>
 
-<a-camera position="0 0 0"></a-camera>
+<a-camera
+  position="0 0 0"
+  look-controls="enabled:false">
+</a-camera>
+
+<a-entity
+  light="type:ambient; intensity:1.6">
+</a-entity>
+
+<a-entity
+  light="type:directional; intensity:1.2"
+  position="1 2 1">
+</a-entity>
 
 <a-entity
   id="target"
@@ -66,8 +83,12 @@ loading...
     id="text"
     gltf-model="#model"
     visible="false"
-    position="0 0 0.1"
-    scale="1 1 1">
+
+    position="-0.25 0 0.05"
+
+    rotation="0 0 0"
+
+    scale="1.6 1.6 1.6">
   </a-entity>
 
 </a-entity>
@@ -76,22 +97,15 @@ loading...
 
 <script>
 
-const hud=document.getElementById("hud");
-const target=document.getElementById("target");
-const text=document.getElementById("text");
+const target = document.querySelector("#target");
+const text = document.querySelector("#text");
 
-text.addEventListener("model-loaded",()=>{
-  hud.innerText="GLB LOADED";
+target.addEventListener("targetFound", () => {
+  text.setAttribute("visible", true);
 });
 
-target.addEventListener("targetFound",()=>{
-  text.setAttribute("visible",true);
-  hud.innerText="TARGET FOUND";
-});
-
-target.addEventListener("targetLost",()=>{
-  text.setAttribute("visible",false);
-  hud.innerText="TARGET LOST";
+target.addEventListener("targetLost", () => {
+  text.setAttribute("visible", false);
 });
 
 </script>
