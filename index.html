@@ -1,68 +1,51 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-  <title>ENNO HAAR WASN'T HERE</title>
+<title>ENNO HAAR</title>
 
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      width: 100%;
-      height: 100%;
-      background: #000;
-    }
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
 
-    #video {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 0;
-    }
+#video {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  z-index: 0;
+}
 
-    a-scene {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      z-index: 1;
-      background: transparent !important;
-    }
-
-    #start {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      display: grid;
-      place-items: center;
-      background: rgba(0,0,0,0.75);
-      color: white;
-      font: 18px -apple-system, system-ui, sans-serif;
-    }
-
-    #btn {
-      padding: 14px 18px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.35);
-      background: rgba(255,255,255,.12);
-    }
-  </style>
+a-scene {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 1;
+  background: transparent !important;
+}
+</style>
 </head>
 
 <body>
 
-<video id="video" playsinline webkit-playsinline muted></video>
-
-<div id="start">
-  <div id="btn">Start</div>
-</div>
+<video
+  id="video"
+  playsinline
+  webkit-playsinline
+  muted>
+</video>
 
 <a-scene
   embedded
@@ -70,58 +53,79 @@
   background="transparent:true"
   vr-mode-ui="enabled:false"
 >
+
   <a-assets>
-    <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
+    <a-asset-item
+      id="model"
+      src="./enno6_test.glb">
+    </a-asset-item>
   </a-assets>
 
-  <a-entity light="type: ambient; intensity: 1.8"></a-entity>
-  <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
+  <a-entity
+    light="type: ambient; intensity: 1.8">
+  </a-entity>
 
-  <a-entity id="world">
+  <a-entity
+    light="type: directional; intensity: 1.2"
+    position="1 2 1">
+  </a-entity>
 
-    <a-entity
-      id="text"
-      gltf-model="#model"
-      position="-2.2 0 -6"
-      rotation="0 0 0"
-      scale="3.85 3.85 3.85">
-    </a-entity>
-
+  <a-entity
+    id="text"
+    gltf-model="#model"
+    position="-4 0 -20"
+    rotation="0 0 0"
+    scale="7 7 7">
   </a-entity>
 
   <a-camera
-    id="camera"
     position="0 0 0"
     look-controls="enabled:true"
     wasd-controls="enabled:false">
   </a-camera>
+
 </a-scene>
 
 <script>
-  const video = document.getElementById("video");
-  const start = document.getElementById("start");
-  const btn = document.getElementById("btn");
 
-  async function startCamera() {
+async function startCamera() {
+
+  try {
+
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        facingMode: {
+          ideal: "environment"
+        },
+        width: {
+          ideal: 1920
+        },
+        height: {
+          ideal: 1080
+        }
       }
     });
 
+    const video = document.getElementById("video");
+
     video.srcObject = stream;
-    video.muted = true;
+
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
+
     await video.play();
 
-    start.style.display = "none";
+  } catch (err) {
+
+    console.error(err);
+
   }
 
-  btn.addEventListener("click", startCamera);
+}
+
+window.addEventListener("load", startCamera);
+
 </script>
 
 </body>
