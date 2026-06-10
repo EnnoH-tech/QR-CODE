@@ -6,6 +6,9 @@
 
   <title>ENNO HAAR WASN'T HERE</title>
 
+  <meta property="og:title" content="ENNO HAAR WASN'T HERE">
+  <meta name="apple-mobile-web-app-title" content="ENNO HAAR WASN'T HERE">
+
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -73,92 +76,119 @@
 </head>
 
 <body>
-<div id="app">
-  <div id="hud">LOADING…</div>
 
-  <a-scene
-    id="scene"
-    embedded
-    mindar-image="
-      imageTargetSrc: ./targets2.mind;
-      autoStart:true;
-      uiLoading:false;
-      uiScanning:false;
-      filterMinCF:0.0005;
-      filterBeta:0.02;
-    "
-    renderer="alpha:true; antialias:true; colorManagement:true"
-    vr-mode-ui="enabled:false"
-    device-orientation-permission-ui="enabled:false"
-  >
-    <a-assets>
-      <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
-    </a-assets>
+  <div id="app">
 
-    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+    <div id="hud">LOADING...</div>
 
-    <a-entity light="type: ambient; intensity: 1.6"></a-entity>
-    <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
+    <a-scene
+      id="scene"
+      embedded
+      mindar-image="
+        imageTargetSrc: ./targets3new.mind;
+        autoStart:true;
+        uiLoading:false;
+        uiScanning:false;
+        filterMinCF:0.0005;
+        filterBeta:0.02;
+      "
+      renderer="alpha:true; antialias:true; colorManagement:true"
+      vr-mode-ui="enabled:false"
+      device-orientation-permission-ui="enabled:false"
+    >
 
-    <a-entity id="target" mindar-image-target="targetIndex:0">
+      <a-assets>
+        <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera
+        position="0 0 0"
+        look-controls="enabled:false">
+      </a-camera>
+
       <a-entity
-        id="text"
-        gltf-model="#model"
-        visible="false"
-        position="-0.25 0 0.05"
-        rotation="0 0 0"
-        scale="1.6 1.6 1.6">
+        light="type: ambient; intensity: 1.6">
       </a-entity>
-    </a-entity>
-  </a-scene>
-</div>
 
-<script>
-  function setVH() {
-    document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
-  }
+      <a-entity
+        light="type: directional; intensity: 1.2"
+        position="1 2 1">
+      </a-entity>
 
-  setVH();
-  window.addEventListener("resize", setVH);
-  window.addEventListener("orientationchange", () => setTimeout(setVH, 200));
+      <a-entity
+        id="target"
+        mindar-image-target="targetIndex:0">
 
-  const hud = document.getElementById("hud");
-  const scene = document.getElementById("scene");
-  const target = document.getElementById("target");
-  const text = document.getElementById("text");
+        <a-entity
+          id="text"
+          gltf-model="#model"
+          visible="false"
+          position="-0.25 0 0.05"
+          rotation="0 0 0"
+          scale="1.6 1.6 1.6">
+        </a-entity>
 
-  scene.addEventListener("loaded", () => {
-    hud.textContent = "SCENE: loaded\nTARGET: scanning…";
-    try {
-      scene.renderer.setClearColor(0x000000, 0);
-    } catch(e) {}
-  });
+      </a-entity>
 
-  scene.addEventListener("arReady", () => {
-    hud.textContent = "AR: ready\nTARGET: scanning…";
-  });
+    </a-scene>
 
-  scene.addEventListener("arError", () => {
-    hud.textContent = "AR: error";
-  });
+  </div>
 
-  text.addEventListener("model-loaded", () => {
-    hud.textContent += "\nGLB: loaded";
-  });
+  <script>
+    function setVH() {
+      document.documentElement.style.setProperty(
+        "--vh",
+        `${window.innerHeight * 0.01}px`
+      );
+    }
 
-  text.addEventListener("model-error", () => {
-    hud.textContent += "\nGLB: error";
-  });
+    setVH();
 
-  target.addEventListener("targetFound", () => {
-    text.setAttribute("visible", "true");
-    hud.textContent = "TARGET: found\nMODEL: visible";
-  });
+    window.addEventListener("resize", setVH);
 
-  target.addEventListener("targetLost", () => {
-    text.setAttribute("visible", "false");
-    hud.textContent = "TARGET: lost";
-  });
-</script>
+    window.addEventListener(
+      "orientationchange",
+      () => setTimeout(setVH, 200)
+    );
+
+    const hud = document.getElementById("hud");
+    const scene = document.getElementById("scene");
+    const target = document.getElementById("target");
+    const text = document.getElementById("text");
+
+    scene.addEventListener("loaded", () => {
+      hud.innerText = "SCENE LOADED";
+      try {
+        scene.renderer.setClearColor(0x000000, 0);
+      } catch (e) {}
+    });
+
+    scene.addEventListener("arReady", () => {
+      hud.innerText = "AR READY\nTARGET SCANNING";
+    });
+
+    scene.addEventListener("arError", () => {
+      hud.innerText = "AR ERROR";
+    });
+
+    text.addEventListener("model-loaded", () => {
+      hud.innerText += "\nGLB LOADED";
+    });
+
+    text.addEventListener("model-error", () => {
+      hud.innerText += "\nGLB ERROR";
+    });
+
+    target.addEventListener("targetFound", () => {
+      text.setAttribute("visible", "true");
+      hud.innerText = "TARGET FOUND\nMODEL VISIBLE";
+    });
+
+    target.addEventListener("targetLost", () => {
+      text.setAttribute("visible", "false");
+      hud.innerText = "TARGET LOST";
+    });
+  </script>
+
 </body>
 </html>
