@@ -6,189 +6,114 @@
 
   <title>ENNO HAAR WASN'T HERE</title>
 
-  <meta property="og:title" content="ENNO HAAR WASN'T HERE">
-  <meta name="apple-mobile-web-app-title" content="ENNO HAAR WASN'T HERE">
-
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     html, body {
       margin: 0;
       padding: 0;
+      overflow: hidden;
       width: 100%;
       height: 100%;
-      overflow: hidden;
       background: #000;
     }
 
-    :root {
-      --vh: 1vh;
-    }
-
-    #app {
+    #video {
       position: fixed;
       inset: 0;
       width: 100vw;
-      height: calc(var(--vh) * 100);
-      overflow: hidden;
-      background: #000;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
     }
 
     a-scene {
-      position: absolute !important;
+      position: fixed !important;
       inset: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 1;
       background: transparent !important;
     }
 
-    .mindar-container,
-    .mindar-container video,
-    .mindar-container canvas,
-    canvas.a-canvas {
-      position: absolute !important;
-      inset: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      background: transparent !important;
-    }
-
-    .mindar-ui-loading,
-    .mindar-ui-scanning {
-      display: none !important;
-    }
-
-    #hud {
+    #start {
       position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 9999;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      background: rgba(0,0,0,0.75);
       color: white;
-      background: rgba(0,0,0,.6);
-      padding: 8px;
-      border-radius: 6px;
-      font: 13px -apple-system, system-ui, sans-serif;
-      white-space: pre-line;
+      font: 18px -apple-system, system-ui, sans-serif;
+    }
+
+    #btn {
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.35);
+      background: rgba(255,255,255,.12);
     }
   </style>
 </head>
 
 <body>
 
-  <div id="app">
+<video id="video" playsinline webkit-playsinline muted></video>
 
-    <div id="hud">LOADING...</div>
+<div id="start">
+  <div id="btn">Start</div>
+</div>
 
-    <a-scene
-      id="scene"
-      embedded
-      mindar-image="
-        imageTargetSrc: ./targets4.mind;
-        autoStart:true;
-        uiLoading:false;
-        uiScanning:false;
-        filterMinCF:0.0005;
-        filterBeta:0.02;
-      "
-      renderer="alpha:true; antialias:true; colorManagement:true"
-      vr-mode-ui="enabled:false"
-      device-orientation-permission-ui="enabled:false"
-    >
+<a-scene
+  embedded
+  renderer="alpha:true; antialias:true; colorManagement:true"
+  background="transparent:true"
+  vr-mode-ui="enabled:false"
+>
+  <a-assets>
+    <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
+  </a-assets>
 
-      <a-assets>
-        <a-asset-item id="model" src="./enno6_test.glb"></a-asset-item>
-      </a-assets>
+  <a-entity light="type: ambient; intensity: 1.6"></a-entity>
+  <a-entity light="type: directional; intensity: 1.2" position="1 2 1"></a-entity>
 
-      <a-camera
-        position="0 0 0"
-        look-controls="enabled:false">
-      </a-camera>
+  <a-entity
+    id="text"
+    gltf-model="#model"
+    position="0 0 -2"
+    rotation="0 0 0"
+    scale="1.8 1.8 1.8">
+  </a-entity>
 
-      <a-entity
-        light="type: ambient; intensity: 1.6">
-      </a-entity>
+  <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+</a-scene>
 
-      <a-entity
-        light="type: directional; intensity: 1.2"
-        position="1 2 1">
-      </a-entity>
+<script>
+  const video = document.getElementById("video");
+  const start = document.getElementById("start");
+  const btn = document.getElementById("btn");
 
-      <a-entity
-        id="target"
-        mindar-image-target="targetIndex:0">
-
-        <a-entity
-          id="text"
-          gltf-model="#model"
-          visible="false"
-          position="-0.25 0 0.05"
-          rotation="0 0 0"
-          scale="1.6 1.6 1.6">
-        </a-entity>
-
-      </a-entity>
-
-    </a-scene>
-
-  </div>
-
-  <script>
-    function setVH() {
-      document.documentElement.style.setProperty(
-        "--vh",
-        `${window.innerHeight * 0.01}px`
-      );
-    }
-
-    setVH();
-
-    window.addEventListener("resize", setVH);
-
-    window.addEventListener(
-      "orientationchange",
-      () => setTimeout(setVH, 200)
-    );
-
-    const hud = document.getElementById("hud");
-    const scene = document.getElementById("scene");
-    const target = document.getElementById("target");
-    const text = document.getElementById("text");
-
-    scene.addEventListener("loaded", () => {
-      hud.innerText = "SCENE LOADED";
-      try {
-        scene.renderer.setClearColor(0x000000, 0);
-      } catch (e) {}
+  async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
     });
 
-    scene.addEventListener("arReady", () => {
-      hud.innerText = "AR READY\nTARGET SCANNING";
-    });
+    video.srcObject = stream;
+    video.muted = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    await video.play();
 
-    scene.addEventListener("arError", () => {
-      hud.innerText = "AR ERROR";
-    });
+    start.style.display = "none";
+  }
 
-    text.addEventListener("model-loaded", () => {
-      hud.innerText += "\nGLB LOADED";
-    });
-
-    text.addEventListener("model-error", () => {
-      hud.innerText += "\nGLB ERROR";
-    });
-
-    target.addEventListener("targetFound", () => {
-      text.setAttribute("visible", "true");
-      hud.innerText = "TARGET FOUND\nMODEL VISIBLE";
-    });
-
-    target.addEventListener("targetLost", () => {
-      text.setAttribute("visible", "false");
-      hud.innerText = "TARGET LOST";
-    });
-  </script>
+  btn.addEventListener("click", startCamera);
+</script>
 
 </body>
 </html>
