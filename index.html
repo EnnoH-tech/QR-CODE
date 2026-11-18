@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v20</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v21</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -143,8 +143,8 @@ window.addEventListener("load", startCamera);
     // The GLB is ~6.26 units wide and has two stacked text meshes.
     // Excessive uniform scaling caused severe perspective distortion.
     // Fit the word across the viewport, but independently enlarge letter height.
-    const scaleX = w * 2.35 / Math.max(size.x, 0.00001);
-    const scaleY = scaleX * 3.3;
+    const scaleX = w * 2.95 / Math.max(size.x, 0.00001);
+    const scaleY = scaleX * 2.65;
     const scaleZ = scaleX * 0.12;
     model.object3D.scale.set(scaleX, scaleY, scaleZ);
     // Place the pivot at the leftmost edge (ENNO), not at the center.
