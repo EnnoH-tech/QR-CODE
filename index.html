@@ -70,7 +70,7 @@ a-scene {
     position="1 2 1">
   </a-entity>
 
-  <a-entity id="textFrame" position="0 0 -5" rotation="0 -2 0">
+  <a-entity id="textFrame" position="0 0 -5" rotation="0 5 0">
     <a-entity id="text" gltf-model="#model"></a-entity>
   </a-entity>
   <a-camera
@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v11</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v12</div>
 <script>
 (function () {
   const model = document.getElementById('text');
