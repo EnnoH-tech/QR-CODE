@@ -70,13 +70,9 @@ a-scene {
     position="1 2 1">
   </a-entity>
 
- <a-entity
-  id="text"
-  gltf-model="#model"
-  position="-3.8 -65 -12"
-  rotation="0 -2 0"
-  scale="125 125 125">
-</a-entity>
+  <a-entity id="textFrame" position="0 0 -5" rotation="0 -2 0">
+    <a-entity id="text" gltf-model="#model"></a-entity>
+  </a-entity>
   <a-camera
     position="0 0 0"
     look-controls="enabled:true"
@@ -127,5 +123,40 @@ window.addEventListener("load", startCamera);
 
 </script>
 
+
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v10</div>
+<script>
+(function () {
+  const model = document.getElementById('text');
+  const frame = document.getElementById('textFrame');
+  const cameraEl = document.querySelector('a-camera');
+  let bounds = null;
+  function positionModel() {
+    if (!bounds) return;
+    const camera = cameraEl.getObject3D('camera');
+    if (!camera || !camera.aspect) return;
+    const depth = 5;
+    const h = 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov || 80) / 2);
+    const w = h * camera.aspect;
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    // 2.5x screen width, without any height-based shrinkage.
+    const scale = w * 2.5 / Math.max(size.x, 0.00001);
+    model.object3D.scale.setScalar(scale);
+    model.object3D.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+    // Anchor the actual lower edge at 96% of the initial camera view.
+    frame.object3D.position.set(0, -h * 0.46 + size.y * scale / 2, -depth);
+  }
+  model.addEventListener('model-loaded', function () {
+    const mesh = model.getObject3D('mesh');
+    if (!mesh) return;
+    mesh.updateMatrixWorld(true);
+    bounds = new THREE.Box3().setFromObject(mesh);
+    positionModel();
+  });
+  document.querySelector('a-scene').addEventListener('renderstart', positionModel);
+  window.addEventListener('resize', positionModel);
+})();
+</script>
 </body>
 </html>
