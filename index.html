@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v10</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v11</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -140,8 +140,8 @@ window.addEventListener("load", startCamera);
     const w = h * camera.aspect;
     const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
-    // 2.5x screen width, without any height-based shrinkage.
-    const scale = w * 2.5 / Math.max(size.x, 0.00001);
+    // 7.5x screen width, without any height-based shrinkage.
+    const scale = w * 7.5 / Math.max(size.x, 0.00001);
     model.object3D.scale.setScalar(scale);
     model.object3D.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
     // Anchor the actual lower edge at 96% of the initial camera view.
