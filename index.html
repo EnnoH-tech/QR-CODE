@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v29</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v30</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -163,37 +163,28 @@ window.addEventListener("load", startCamera);
   model.addEventListener('model-loaded', function () {
     const mesh = model.getObject3D('mesh');
     if (!mesh) return;
-    // Compensate the natural shrink of the distant word HAAR.
-    // Keep the existing purple/white meshes and their 3D depth unchanged.
-    // Geometry is adjusted in model-local space, so both colors stay aligned.
+    // v30: Only widen the final A A R. Do not modify height.
+    // Adjust every mesh vertex consistently, including white sides and purple front.
     mesh.updateMatrixWorld(true);
-    const originalBounds = new THREE.Box3().setFromObject(mesh);
-    const localBounds = originalBounds.clone().applyMatrix4(
-      new THREE.Matrix4().copy(mesh.matrixWorld).invert()
-    );
-    const minX = localBounds.min.x;
-    const width = Math.max(localBounds.max.x - minX, 0.00001);
-    const midY = (localBounds.min.y + localBounds.max.y) / 2;
-    mesh.traverse(function (part) {
+    const rootBox = new THREE.Box3().setFromObject(mesh);
+    const rootInverse = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+    const localBox = rootBox.clone().applyMatrix4(rootInverse);
+    const startX = localBox.min.x + (localBox.max.x - localBox.min.x) * 0.67;
+    const stretch = 1.30;
+    mesh.traverse(function(part) {
       if (!part.isMesh || !part.geometry?.attributes?.position) return;
       part.geometry = part.geometry.clone();
-      const position = part.geometry.attributes.position;
-      const rootToPart = new THREE.Matrix4().copy(part.matrixWorld).invert()
-        .multiply(mesh.matrixWorld);
-      const partToRoot = new THREE.Matrix4().copy(mesh.matrixWorld).invert()
-        .multiply(part.matrixWorld);
-      const vertex = new THREE.Vector3();
-      for (let i = 0; i < position.count; i++) {
-        vertex.fromBufferAttribute(position, i).applyMatrix4(partToRoot);
-        const fraction = THREE.MathUtils.clamp((vertex.x - minX) / width, 0, 1);
-        const t = THREE.MathUtils.smoothstep(fraction, 0.43, 0.93);
-        // Up to 48% larger toward the end of HAAR, tapering in smoothly.
-        const heightBoost = 1 + 0.48 * t;
-        vertex.y = midY + (vertex.y - midY) * heightBoost;
-        vertex.applyMatrix4(rootToPart);
-        position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+      const pos = part.geometry.attributes.position;
+      const toRoot = new THREE.Matrix4().copy(mesh.matrixWorld).invert().multiply(part.matrixWorld);
+      const fromRoot = new THREE.Matrix4().copy(part.matrixWorld).invert().multiply(mesh.matrixWorld);
+      const p = new THREE.Vector3();
+      for (let i=0; i<pos.count; i++) {
+        p.fromBufferAttribute(pos,i).applyMatrix4(toRoot);
+        if (p.x > startX) p.x = startX + (p.x - startX) * stretch;
+        p.applyMatrix4(fromRoot);
+        pos.setXYZ(i,p.x,p.y,p.z);
       }
-      position.needsUpdate = true;
+      pos.needsUpdate = true;
       part.geometry.computeBoundingBox();
       part.geometry.computeBoundingSphere();
       part.geometry.computeVertexNormals();
