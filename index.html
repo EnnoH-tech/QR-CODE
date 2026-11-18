@@ -70,7 +70,7 @@ a-scene {
     position="1 2 1">
   </a-entity>
 
-  <a-entity id="textFrame" position="0 0 -5" rotation="0 5 0">
+  <a-entity id="textFrame" position="0 0 -5" rotation="0 8 0">
     <a-entity id="text" gltf-model="#model"></a-entity>
   </a-entity>
   <a-camera
@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v12</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v13</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -143,9 +143,19 @@ window.addEventListener("load", startCamera);
     // 7.5x screen width, without any height-based shrinkage.
     const scale = w * 7.5 / Math.max(size.x, 0.00001);
     model.object3D.scale.setScalar(scale);
-    model.object3D.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+    // Place the pivot at the leftmost edge (ENNO), not at the center.
+    // Keep the lettering centered before rotation, preserving its lower placement.
+    const halfWidth = size.x * scale / 2;
+    model.object3D.position.set(
+      -bounds.min.x * scale,
+      -center.y * scale,
+      -center.z * scale
+    );
+    frame.object3D.rotation.set(0, THREE.MathUtils.degToRad(8), 0);
+    frame.object3D.position.x = -halfWidth;
     // Anchor the actual lower edge at 96% of the initial camera view.
-    frame.object3D.position.set(0, -h * 0.46 + size.y * scale / 2, -depth);
+    frame.object3D.position.y = -h * 0.46 + size.y * scale / 2;
+    frame.object3D.position.z = -depth;
   }
   model.addEventListener('model-loaded', function () {
     const mesh = model.getObject3D('mesh');
