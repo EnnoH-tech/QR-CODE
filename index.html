@@ -70,7 +70,7 @@ a-scene {
     position="-2 4 3">
   </a-entity>
 
-  <a-entity id="textFrame" position="0 0 -5" rotation="0 22 0">
+  <a-entity id="textFrame" position="0 0 -5" rotation="0 12 0">
     <a-entity id="text" gltf-model="#model"></a-entity>
   </a-entity>
   <a-camera
@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v27</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v28</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -153,7 +153,7 @@ window.addEventListener("load", startCamera);
       -center.y * scaleY,
       -center.z * scaleZ
     );
-    frame.object3D.rotation.set(0, THREE.MathUtils.degToRad(22), 0);
+    frame.object3D.rotation.set(0, THREE.MathUtils.degToRad(12), 0);
     // Start ENNO just inside the left edge of the camera viewport.
     frame.object3D.position.x = -w * 0.47;
     // Anchor the actual lower edge at 96% of the initial camera view.
