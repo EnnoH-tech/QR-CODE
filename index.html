@@ -62,11 +62,11 @@ a-scene {
   </a-assets>
 
   <a-entity
-    light="type: ambient; intensity: 0.42">
+    light="type: ambient; intensity: 0.28">
   </a-entity>
 
   <a-entity
-    light="type: directional; intensity: 2.5"
+    light="type: directional; intensity: 2.8"
     position="-2 4 3">
   </a-entity>
 
@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v24</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v25</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -145,7 +145,7 @@ window.addEventListener("load", startCamera);
     // Fit the word across the viewport, but independently enlarge letter height.
     const scaleX = w * 3.35 / Math.max(size.x, 0.00001);
     const scaleY = scaleX * 2.50;
-    const scaleZ = scaleX * 0.52;
+    const scaleZ = scaleX * 0.78;
     model.object3D.scale.set(scaleX, scaleY, scaleZ);
     // Place the pivot at the leftmost edge (ENNO), not at the center.
     model.object3D.position.set(
