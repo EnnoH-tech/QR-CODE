@@ -70,12 +70,12 @@ a-scene {
     position="1 2 1">
   </a-entity>
 
-  <!-- The camera-attached frame gives predictable screen placement without image tracking. -->
+  <!-- World-space lettering: moves relative to camera orientation. -->
+  <a-entity id="textFrame" position="0 -2 -5" rotation="0 -12 0">
+    <a-entity id="text" gltf-model="#model"></a-entity>
+  </a-entity>
   <a-camera id="camera" position="0 0 0"
     look-controls="enabled:true" wasd-controls="enabled:false">
-    <a-entity id="textFrame" position="0 0 -5" rotation="0 -2 0">
-      <a-entity id="text" gltf-model="#model"></a-entity>
-    </a-entity>
   </a-camera>
 </a-scene>
 
@@ -122,8 +122,8 @@ window.addEventListener("load", startCamera);
 </script>
 
 <script>
-// Fit the actual GLB geometry to the camera viewport.
-// This avoids the GLB's origin/pivot pushing the lettering out of view.
+// Measure the GLB itself, rather than relying on its possibly offset origin.
+// Position it in WORLD space, not as a child of the camera.
 const textEl = document.getElementById("text");
 const frameEl = document.getElementById("textFrame");
 const cameraEl = document.getElementById("camera");
@@ -133,20 +133,15 @@ let modelCenter = null;
 function fitLettering() {
   if (!modelSize || !modelCenter) return;
   const camera = cameraEl.getObject3D("camera");
-  const object = textEl.getObject3D("mesh");
-  if (!camera || !object) return;
-
+  if (!camera) return;
   const depth = 5;
   const fov = THREE.MathUtils.degToRad(camera.fov || 80);
   const visibleHeight = 2 * depth * Math.tan(fov / 2);
   const visibleWidth = visibleHeight * camera.aspect;
 
-  // Fill most of the screen width, with a cap on letter height.
-  const scale = Math.min(
-    (visibleWidth * 0.94) / Math.max(modelSize.x, 0.00001),
-    (visibleHeight * 0.34) / Math.max(modelSize.y, 0.00001)
-  );
-
+  // Make the letters intentionally larger than the camera width.
+  // No small-height cap that could shrink the whole model.
+  const scale = (visibleWidth * 1.55) / Math.max(modelSize.x, 0.00001);
   textEl.object3D.scale.setScalar(scale);
   textEl.object3D.position.set(
     -modelCenter.x * scale,
@@ -154,10 +149,11 @@ function fitLettering() {
     -modelCenter.z * scale
   );
 
-  // Place the bottom edge around 95% down the screen.
+  // Bottom edge at approximately 98% of the initial camera frame.
   const renderedHeight = modelSize.y * scale;
-  const centerY = -visibleHeight * 0.45 + renderedHeight / 2;
+  const centerY = -visibleHeight * 0.48 + renderedHeight / 2;
   frameEl.object3D.position.set(0, centerY, -depth);
+  frameEl.object3D.rotation.set(0, THREE.MathUtils.degToRad(-12), 0);
 }
 
 textEl.addEventListener("model-loaded", () => {
