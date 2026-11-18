@@ -70,7 +70,7 @@ a-scene {
     position="1 2 1">
   </a-entity>
 
-  <a-entity id="textFrame" position="0 0 -5" rotation="0 -0.5 0">
+  <a-entity id="textFrame" position="0 0 -5" rotation="0 2 0">
     <a-entity id="text" gltf-model="#model"></a-entity>
   </a-entity>
   <a-camera
@@ -124,7 +124,7 @@ window.addEventListener("load", startCamera);
 </script>
 
 
-<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v17</div>
+<div id="version" style="position:fixed;bottom:env(safe-area-inset-bottom, 0px);right:6px;color:#fff;background:#0009;font:10px monospace;z-index:10;padding:3px;pointer-events:none">AR v18</div>
 <script>
 (function () {
   const model = document.getElementById('text');
@@ -140,20 +140,23 @@ window.addEventListener("load", startCamera);
     const w = h * camera.aspect;
     const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
-    // 7.5x screen width, without any height-based shrinkage.
-    const scale = w * 7.5 / Math.max(size.x, 0.00001);
-    model.object3D.scale.setScalar(scale);
+    // The GLB is ~6.26 units wide and has two stacked text meshes.
+    // Excessive uniform scaling caused severe perspective distortion.
+    // Fit the word across the viewport, but independently enlarge letter height.
+    const scaleX = w * 1.65 / Math.max(size.x, 0.00001);
+    const scaleY = scaleX * 2.5;
+    model.object3D.scale.set(scaleX, scaleY, scaleX);
     // Place the pivot at the leftmost edge (ENNO), not at the center.
     model.object3D.position.set(
-      -bounds.min.x * scale,
-      -center.y * scale,
-      -center.z * scale
+      -bounds.min.x * scaleX,
+      -center.y * scaleY,
+      -center.z * scaleX
     );
-    frame.object3D.rotation.set(0, THREE.MathUtils.degToRad(-0.5), 0);
+    frame.object3D.rotation.set(0, THREE.MathUtils.degToRad(2), 0);
     // Start ENNO just inside the left edge of the camera viewport.
     frame.object3D.position.x = -w * 0.47;
     // Anchor the actual lower edge at 96% of the initial camera view.
-    frame.object3D.position.y = -h * 0.68 + size.y * scale / 2;
+    frame.object3D.position.y = -h * 0.45 + size.y * scaleY / 2;
     frame.object3D.position.z = -depth;
   }
   model.addEventListener('model-loaded', function () {
