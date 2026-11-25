@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ENNO HAAR · QR-Marker AR v31</title>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08070b;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+  a-scene{position:fixed!important;inset:0!important;width:100%!important;height:100%!important}
+  .mindar-ui-loading,.mindar-ui-scanning,.mindar-ui-error{display:none!important}
+  #info{position:fixed;bottom:max(14px,env(safe-area-inset-bottom));left:12px;right:12px;z-index:99999;pointer-events:none;color:white;display:flex;justify-content:center}
+  #status{padding:9px 13px;border-radius:12px;background:rgba(0,0,0,.66);font:13px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;text-align:center;max-width:95vw}
+  #tag{position:fixed;right:6px;top:max(6px,env(safe-area-inset-top));color:#fff;background:#0007;font-size:10px;z-index:99999;padding:3px}
+</style>
+</head>
+<body>
+<div id="info"><div id="status">Kamera wird gestartet …</div></div>
+<div id="tag">AR QR TEST v31</div>
+<a-scene
+ id="scene"
+ mindar-image="imageTargetSrc: ./targets2.mind; autoStart: true; uiLoading: false; uiScanning: false; uiError: false; filterMinCF: 0.001; filterBeta: 0.03;"
+ embedded
+ color-space="sRGB"
+ renderer="alpha: true; antialias: true; colorManagement: true"
+ vr-mode-ui="enabled: false"
+ device-orientation-permission-ui="enabled: false"
+ loading-screen="enabled:false">
+ <a-assets timeout="25000">
+   <a-asset-item id="ennoModel" src="./enno6_test.glb"></a-asset-item>
+ </a-assets>
+ <a-entity light="type:ambient;intensity:0.28"></a-entity>
+ <a-entity light="type:directional;intensity:2.8" position="-2 4 3"></a-entity>
+ <a-entity id="qrAnchor" mindar-image-target="targetIndex: 0">
+    <a-entity id="textFrame" position="-0.40 -0.40 0.12" rotation="0 7 0">
+      <a-entity id="text" gltf-model="#ennoModel"></a-entity>
+    </a-entity>
+ </a-entity>
+ <a-camera position="0 0 0" look-controls="enabled:false" wasd-controls="enabled:false"></a-camera>
+</a-scene>
+<script>
+(function(){
+  const scene=document.querySelector('#scene');
+  const anchor=document.querySelector('#qrAnchor');
+  const model=document.querySelector('#text');
+  const status=document.querySelector('#status');
+  const setStatus=(value)=>{status.textContent=value};
+  let ready=false;
+  let tracked=false;
+  let transformed=false;
+  scene.addEventListener('arReady',()=>setStatus(ready?'QR-Code in die Kamera halten':'Modell wird geladen …'));
+  scene.addEventListener('arError',()=>setStatus('Kamera/AR konnte nicht starten. Bitte Safari öffnen und Kamerazugriff erlauben.'));
+  anchor.addEventListener('targetFound',()=>{
+    tracked=true;
+    setStatus(ready?'QR erkannt – Schrift folgt dem Marker':'QR erkannt – Schrift wird geladen …');
+  });
+  anchor.addEventListener('targetLost',()=>{
+    tracked=false;
+    setStatus('QR-Code wieder ins Kamerabild halten');
+  });
+  model.addEventListener('model-error',()=>setStatus('3D-Modell konnte nicht geladen werden. Bitte Verbindung prüfen.'));
+  model.addEventListener('model-loaded',function(){
+    const mesh=model.getObject3D('mesh');
+    if(!mesh || transformed)return;
+    transformed=true;
+    mesh.updateMatrixWorld(true);
+    // Match v31: broaden the last A A R by 30% in X without changing letter height.
+    const rootBox=new THREE.Box3().setFromObject(mesh);
+    const rootInv=new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+    const localBox=rootBox.clone().applyMatrix4(rootInv);
+    const startX=localBox.min.x+(localBox.max.x-localBox.min.x)*0.67;
+    mesh.traverse(function(part){
+      if(!part.isMesh || !part.geometry || !part.geometry.attributes.position)return;
+      part.geometry=part.geometry.clone();
+      const pos=part.geometry.attributes.position;
+      const toRoot=new THREE.Matrix4().copy(mesh.matrixWorld).invert().multiply(part.matrixWorld);
+      const fromRoot=new THREE.Matrix4().copy(part.matrixWorld).invert().multiply(mesh.matrixWorld);
+      const p=new THREE.Vector3();
+      for(let i=0;i<pos.count;i++){
+        p.fromBufferAttribute(pos,i).applyMatrix4(toRoot);
+        if(p.x>startX)p.x=startX+(p.x-startX)*1.30;
+        p.applyMatrix4(fromRoot);
+        pos.setXYZ(i,p.x,p.y,p.z);
+      }
+      pos.needsUpdate=true;
+      part.geometry.computeBoundingBox();
+      part.geometry.computeBoundingSphere();
+      part.geometry.computeVertexNormals();
+    });
+    mesh.updateMatrixWorld(true);
+    // The marker is 1 unit wide. The word extends 2.4 marker widths.
+    // Preserve v31's horizontal/wide and deep letter proportions, plus 7° yaw.
+    const bounds=new THREE.Box3().setFromObject(mesh);
+    const size=bounds.getSize(new THREE.Vector3());
+    const scaleX=2.4/Math.max(size.x,0.0001);
+    const scaleY=scaleX*2.50;
+    const scaleZ=scaleX*0.78;
+    model.object3D.scale.set(scaleX,scaleY,scaleZ);
+    model.object3D.position.set(-bounds.min.x*scaleX, -bounds.min.y*scaleY, -bounds.getCenter(new THREE.Vector3()).z*scaleZ);
+    ready=true;
+    setStatus(tracked?'QR erkannt – Schrift folgt dem Marker':'QR-Code in die Kamera halten');
+  });
+})();
+</script>
+</body>
+</html>
