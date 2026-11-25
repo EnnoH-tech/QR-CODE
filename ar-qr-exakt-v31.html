@@ -1,0 +1,185 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ENNO HAAR – QR-Marker Test</title>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07060a;color:#fff;font:15px system-ui}
+#pane{position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:12px;right:12px;text-align:center;z-index:9999;pointer-events:none}
+#status{display:inline-block;margin:0 auto 10px;padding:10px 14px;border-radius:10px;background:#000b;max-width:90%;line-height:1.4}
+#start{display:block;pointer-events:auto;margin:auto;background:#8500d9;border:0;border-radius:12px;color:white;font:700 17px system-ui;padding:14px 23px}
+#start:disabled{opacity:.5}
+#version{position:fixed;right:5px;top:max(5px,env(safe-area-inset-top));z-index:9999;background:#000b;font-size:10px;padding:4px}
+</style></head><body>
+<a-scene id="arScene" embedded renderer="colorManagement:true;antialias:true"
+ vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false">
+  <a-assets><a-asset-item id="model" src="./enno6_test.glb"></a-asset-item></a-assets>
+  <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+  <a-entity light="type:ambient;intensity:0.35"></a-entity>
+  <a-entity light="type:directional;intensity:2.8" position="-2 4 3"></a-entity>
+  <a-entity id="anchor" mindar-image-target="targetIndex:0">
+   <a-entity id="frame" position="-0.4 -0.43 0.1" rotation="0 7 0">
+    <a-entity id="text" gltf-model="#model"></a-entity>
+   </a-entity>
+  </a-entity>
+</a-scene>
+<div id="version">QR-AR EXACT v1</div>
+<div id="pane"><div id="status">QR-Code-Marker wird vorbereitet …</div><button id="start" disabled>Kamera starten</button></div>
+<script>
+(()=>{
+const grid=`1fcc8497f
+10517c141
+174a5e85d
+174bacc5d
+175311c5d
+104884441
+1fd55557f
+000224f00
+05d862392
+091a347f7
+077cd60c4
+028964a70
+066fbf1b0
+013192123
+09fe6b72f
+1aae26a5c
+04412c0a8
+0638e3e69
+0c4cda0c7
+0b2392e09
+00f6d338d
+1f3876783
+0adb34935
+152d6d503
+1977337f5
+0019eef10
+1fc37595c
+1051a791c
+1750701fc
+174dcd05a
+175848084
+10495ee58
+1fc301101`.trim().split(/\s+/);
+const scene=document.querySelector('#arScene');
+const button=document.querySelector('#start');
+const label=document.querySelector('#status');
+const anchor=document.querySelector('#anchor');
+const model=document.querySelector('#text');
+const tell=t=>label.textContent=t;
+let objectUrl=null, arStarted=false;
+async function loadCache(){
+ return new Promise(resolve=>{
+  try{
+   const open=indexedDB.open('enno-qr-target-v1',1);
+   open.onupgradeneeded=()=>open.result.createObjectStore('assets');
+   open.onerror=()=>resolve(null);
+   open.onsuccess=()=>{
+    const tx=open.result.transaction('assets','readonly');
+    const rq=tx.objectStore('assets').get('exact-qr-mind');
+    rq.onsuccess=()=>resolve(rq.result||null);
+    rq.onerror=()=>resolve(null);
+   };
+  }catch(e){resolve(null)}
+ });
+}
+async function saveCache(buffer){
+ try{
+  const open=indexedDB.open('enno-qr-target-v1',1);
+  open.onupgradeneeded=()=>open.result.createObjectStore('assets');
+  open.onsuccess=()=>open.result.transaction('assets','readwrite').objectStore('assets').put(buffer,'exact-qr-mind');
+ }catch(e){console.warn('Cache unavailable',e)}
+}
+function buildImage(){
+ const c=document.createElement('canvas');c.width=c.height=500;
+ const ctx=c.getContext('2d',{willReadFrequently:true});
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,500,500);ctx.fillStyle='#000';
+ for(let y=0;y<33;y++){
+  const bits=BigInt('0x'+grid[y]);
+  for(let x=0;x<33;x++)if((bits>>BigInt(32-x))&1n)ctx.fillRect(19+14*x,19+14*y,14,14);
+ }
+ return new Promise((resolve,reject)=>{
+  const image=new Image();
+  image.onload=()=>resolve(image);
+  image.onerror=reject;
+  image.src=c.toDataURL('image/png');
+ });
+}
+async function prepare(){
+ try{
+  let data=await loadCache();
+  if(!data){
+   tell('Erstelle Erkennungsdaten aus deinem Original-QR-Code …');
+   if(!window.MINDAR?.IMAGE?.Compiler)throw new Error('AR-Compiler nicht verfügbar');
+   const image=await buildImage();
+   const compiler=new window.MINDAR.IMAGE.Compiler();
+   await compiler.compileImageTargets([image],progress=>{
+    tell('QR-Erkennung wird vorbereitet: '+Math.round(progress)+' %');
+   });
+   data=await compiler.exportData();
+   saveCache(data);
+  }
+  objectUrl=URL.createObjectURL(new Blob([data],{type:'application/octet-stream'}));
+  scene.setAttribute('mindar-image',{
+    imageTargetSrc:objectUrl,
+    autoStart:false,uiLoading:false,uiScanning:false,uiError:false,
+    filterMinCF:0.001,filterBeta:0.03
+  });
+  button.disabled=false;
+  tell('Bereit. Kamera starten und den Original-QR-Code anvisieren.');
+ }catch(e){
+  console.error('QR compile error:',e);
+  tell('QR-Marker konnte nicht vorbereitet werden: '+(e.message||e));
+ }
+}
+button.addEventListener('click',()=>{
+ const sys=scene.systems['mindar-image-system'];
+ if(!sys){tell('AR-System nicht bereit. Bitte Safari neu laden.');return}
+ button.disabled=true;tell('Kamera wird gestartet …');
+ Promise.resolve(sys.start()).then(()=>{
+  arStarted=true;button.style.display='none';tell('Kamera läuft. Original-QR-Code vor die Kamera halten.');
+ }).catch(e=>{
+  console.error(e);button.disabled=false;
+  tell('Kamera konnte nicht starten: '+(e.message||e));
+ });
+});
+anchor.addEventListener('targetFound',()=>tell('QR-Code erkannt – Schrift folgt dem Marker'));
+anchor.addEventListener('targetLost',()=>tell('Marker verloren – QR-Code wieder ins Bild halten'));
+scene.addEventListener('arError',()=>{button.disabled=false;tell('AR-Fehler. Bitte direkt in Safari öffnen.')});
+let transformed=false;
+model.addEventListener('model-loaded',()=>{
+ if(transformed)return;transformed=true;
+ const mesh=model.getObject3D('mesh');
+ if(!mesh)return;
+ mesh.updateMatrixWorld(true);
+ const initial=new THREE.Box3().setFromObject(mesh);
+ const inv=new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+ const local=initial.clone().applyMatrix4(inv);
+ const startX=local.min.x+(local.max.x-local.min.x)*0.67;
+ mesh.traverse(part=>{
+  if(!part.isMesh||!part.geometry?.attributes?.position)return;
+  part.geometry=part.geometry.clone();
+  const pos=part.geometry.attributes.position;
+  const to=new THREE.Matrix4().copy(mesh.matrixWorld).invert().multiply(part.matrixWorld);
+  const from=new THREE.Matrix4().copy(part.matrixWorld).invert().multiply(mesh.matrixWorld);
+  const p=new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+   p.fromBufferAttribute(pos,i).applyMatrix4(to);
+   if(p.x>startX)p.x=startX+(p.x-startX)*1.3;
+   p.applyMatrix4(from);pos.setXYZ(i,p.x,p.y,p.z);
+  }
+  pos.needsUpdate=true;
+  part.geometry.computeBoundingBox();
+  part.geometry.computeBoundingSphere();
+  part.geometry.computeVertexNormals();
+ });
+ mesh.updateMatrixWorld(true);
+ const box=new THREE.Box3().setFromObject(mesh);
+ const sx=2.4/Math.max(box.getSize(new THREE.Vector3()).x,.00001);
+ model.object3D.scale.set(sx,sx*2.5,sx*0.78);
+ model.object3D.position.set(-box.min.x*sx,-box.min.y*sx*2.5,-box.getCenter(new THREE.Vector3()).z*sx*0.78);
+});
+if(scene.hasLoaded)prepare();
+else scene.addEventListener('loaded',prepare,{once:true});
+})();
+</script></body></html>
