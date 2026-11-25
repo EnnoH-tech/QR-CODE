@@ -3,145 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ENNO HAAR – QR AR Kamera Test</title>
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ENNO HAAR · Marker AR</title>
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 <style>
- html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08070b;font-family:system-ui,-apple-system,sans-serif}
- a-scene{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:transparent!important;z-index:2}
- /* MindAR's camera video sits behind A-Frame. Ensure a transparent 3D canvas. */
- a-scene canvas{position:relative!important;z-index:2!important;background:transparent!important}
- video.ar-camera-visible{position:fixed!important;inset:0!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;object-fit:cover!important;opacity:1!important;visibility:visible!important;display:block!important;z-index:1!important;pointer-events:none!important}
- #camPreview{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:none;pointer-events:none}
- a-scene canvas{background:transparent!important}
- .mindar-ui-loading,.mindar-ui-scanning,.mindar-ui-error{display:none!important}
- #debugVideo{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:3;display:none}
- #overlay{position:fixed;left:12px;right:12px;bottom:max(16px,env(safe-area-inset-bottom));z-index:20000;text-align:center;pointer-events:none}
- #status{background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:11px;font-size:13px;line-height:1.4;margin:0 auto 8px;max-width:480px}
- #controls{pointer-events:auto;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
- button{color:white;border:1px solid #fff5;background:#7f00cd;border-radius:12px;padding:13px 17px;font-size:16px;font-weight:650;cursor:pointer}
- button[disabled]{opacity:.45}
- #testCamera{background:#28232d;font-size:13px;padding:10px 12px}
- #version{position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;background:#000b;color:#ddd;font-size:10px;padding:4px;z-index:30000}
+/* MindAR owns the canvas and camera-video layer. Do not override scene styles. */
+html,body {margin:0;width:100%;height:100%;overflow:hidden;background:black}
+#status {position:fixed;left:12px;right:12px;bottom:max(14px,env(safe-area-inset-bottom));z-index:99999;pointer-events:none;text-align:center;color:white;font:14px/1.35 system-ui,-apple-system,sans-serif;}
+#status span {display:inline-block;background:rgba(0,0,0,.70);padding:10px 15px;border-radius:12px}
+#version {position:fixed;right:7px;top:max(7px,env(safe-area-inset-top));z-index:99999;color:#fff;background:#0009;padding:3px 5px;font:11px monospace}
 </style>
 </head>
 <body>
-<video id="camPreview" muted autoplay playsinline webkit-playsinline></video>
-<video id="debugVideo" muted autoplay playsinline webkit-playsinline></video>
-<a-scene id="scene"
- mindar-image="imageTargetSrc: ./targets2.mind; autoStart: false; uiLoading: false; uiScanning: false; uiError: false; filterMinCF: 0.001; filterBeta: 0.03;"
- embedded renderer="alpha: true; antialias: true; colorManagement: true"
- background="transparent: true" color-space="sRGB"
- vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false"
- loading-screen="enabled: false">
- <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
+<a-scene
+ id="scene"
+ mindar-image="imageTargetSrc: ./targets2.mind; autoStart: true; uiLoading: yes; uiScanning: no; uiError: yes; filterMinCF: 0.001; filterBeta: 0.03;"
+ color-space="sRGB"
+ renderer="colorManagement: true; physicallyCorrectLights: true"
+ vr-mode-ui="enabled: false"
+ device-orientation-permission-ui="enabled: false">
+ <a-assets>
+  <a-asset-item id="ennoModel" src="./enno6_test.glb"></a-asset-item>
+ </a-assets>
+ <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
  <a-entity light="type:ambient;intensity:0.28"></a-entity>
  <a-entity light="type:directional;intensity:2.8" position="-2 4 3"></a-entity>
- <a-entity id="qrAnchor" mindar-image-target="targetIndex: 0">
-   <a-entity id="frame" position="-0.40 -0.40 0.12" rotation="0 7 0">
-     <a-entity id="text" gltf-model="url(./enno6_test.glb)"></a-entity>
-   </a-entity>
+ <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+  <a-entity id="frame" position="-0.40 -0.40 0.12" rotation="0 7 0">
+   <a-entity id="text" gltf-model="#ennoModel"></a-entity>
+  </a-entity>
  </a-entity>
 </a-scene>
-<div id="version">QR-AR KAMERA-TEST v3</div>
-<div id="overlay">
- <div id="status">AR wird vorbereitet …</div>
- <div id="controls">
-  <button id="start" disabled>Kamera starten</button>
-  <button id="testCamera" type="button">Nur Kamera testen</button>
- </div>
-</div>
+<div id="version">QR AR v4</div>
+<div id="status"><span id="message">Kamerazugriff erlauben, danach QR-Code ins Bild halten</span></div>
 <script>
-(()=>{
-const scene=document.getElementById('scene');
-const anchor=document.getElementById('qrAnchor');
-const model=document.getElementById('text');
-const status=document.getElementById('status');
-const start=document.getElementById('start');
-const testCamera=document.getElementById('testCamera');
-const debugVideo=document.getElementById('debugVideo');
-const camPreview=document.getElementById('camPreview');
-let arSystem,ready=false,tracked=false,starting=false,stream=null,transformed=false;
-const tell=(s)=>status.textContent=s;
-function errorMessage(e){
- const k=e&&e.name||'';
- if(k==='NotAllowedError'||k==='PermissionDeniedError')return 'Kamerazugriff verweigert. In Safari bei den Website-Einstellungen die Kamera erlauben.';
- if(k==='NotFoundError'||k==='DevicesNotFoundError')return 'Keine Kamera gefunden.';
- if(k==='NotReadableError')return 'Kamera wird möglicherweise von einer anderen App benutzt.';
- return 'Kamera/AR konnte nicht gestartet werden. '+(e&&e.message||'Bitte Safari öffnen und neu laden.');
-}
-function initAR(){
- arSystem=scene.systems['mindar-image-system'];
- if(arSystem){start.disabled=false;tell('Bereit. Tippe auf „Kamera starten“.');}
- else tell('AR-System ist nicht geladen. Bitte Safari aktualisieren.');
-}
-if(scene.hasLoaded)initAR();
-else scene.addEventListener('loaded',initAR,{once:true});
-function exposeCamera(){
-  try {
-    // MindAR may inject the live stream video behind the opaque A-Frame container.
-    // Mirror its existing stream instead of requesting another camera on iOS.
-    const videos=Array.from(document.querySelectorAll('video')).filter(v=>v!==debugVideo&&v!==camPreview);
-    const live=videos.find(v=>v.srcObject&&v.srcObject.getVideoTracks&&v.srcObject.getVideoTracks().length);
-    if(live){
-      live.setAttribute('playsinline','');
-      live.setAttribute('webkit-playsinline','');
-      live.muted=true;
-      live.classList.add('ar-camera-visible');
-      // Keep original MindAR video attached. Mirror stream in a known lower layer
-      // for CSS environments where MindAR assigns a negative z-index.
-      camPreview.srcObject=live.srcObject;
-      camPreview.style.display='block';
-      camPreview.play().catch(()=>{});
-      const renderer=scene.renderer;
-      if(renderer){
-        renderer.setClearColor(0x000000,0);
-        renderer.setClearAlpha(0);
-        if(scene.object3D)scene.object3D.background=null;
-        renderer.domElement.style.background='transparent';
-      }
-      return true;
-    }
-  }catch(e){console.error('Camera layer',e)}
-  return false;
-}
-scene.addEventListener('arReady',()=>{
- ready=true;starting=false;start.style.display='none';
- const feed=exposeCamera();
- tell(feed?(tracked?'QR erkannt – Schrift folgt dem QR-Code':'Kamera läuft. Jetzt QR-Code ins Bild halten.'):'Kamera gestartet. Prüfe Kamerabild …');
- if(!feed)setTimeout(exposeCamera,700);
- setTimeout(exposeCamera,2200);
-});
-scene.addEventListener('arError',(e)=>{
- starting=false;start.disabled=false;start.style.display='';
- tell('AR-Fehler. Bitte „Nur Kamera testen“ probieren.');
- console.error('MindAR arError:',e);
-});
-anchor.addEventListener('targetFound',()=>{
- tracked=true;
- tell('QR erkannt – Schrift folgt dem Marker.');
-});
-anchor.addEventListener('targetLost',()=>{
- tracked=false;
- if(ready)tell('QR-Code wieder ins Kamerabild halten.');
-});
-model.addEventListener('model-error',(e)=>{
- tell('Kamera funktioniert eventuell, aber das 3D-Modell konnte nicht geladen werden.');
- console.error('GLB model-error',e);
-});
+(function() {
+const scene=document.querySelector('#scene');
+const anchor=document.querySelector('#anchor');
+const model=document.querySelector('#text');
+const message=document.querySelector('#message');
+const show=s=>message.textContent=s;
+anchor.addEventListener('targetFound',()=>show('QR-Code erkannt – Schrift folgt dem QR-Code'));
+anchor.addEventListener('targetLost',()=>show('QR-Code ins Kamerabild halten'));
+scene.addEventListener('arReady',()=>show('Kamera gestartet. QR-Code ins Kamerabild halten'));
+scene.addEventListener('arError',e=>{console.error('AR start failure',e);show('AR konnte nicht starten. Bitte die Seite direkt in Safari öffnen.')});
+model.addEventListener('model-error',e=>{console.error('GLB error',e);show('3D-Modell konnte nicht geladen werden.')});
+let done=false;
 model.addEventListener('model-loaded',()=>{
- if(transformed)return;
- const mesh=model.getObject3D('mesh');
- if(!mesh)return;
- transformed=true;
+ if(done)return;
+ const mesh=model.getObject3D('mesh');if(!mesh)return;
+ done=true;
  mesh.updateMatrixWorld(true);
- // Same GLB lettering as v31: only make the trailing A A R 30% broader.
  const rootBox=new THREE.Box3().setFromObject(mesh);
  const rootInv=new THREE.Matrix4().copy(mesh.matrixWorld).invert();
  const localBox=rootBox.clone().applyMatrix4(rootInv);
  const startX=localBox.min.x+(localBox.max.x-localBox.min.x)*0.67;
- mesh.traverse(part=>{
-  if(!part.isMesh||!part.geometry?.attributes?.position)return;
+ mesh.traverse(function(part){
+  if(!part.isMesh||!part.geometry||!part.geometry.attributes.position)return;
   part.geometry=part.geometry.clone();
   const pos=part.geometry.attributes.position;
   const toRoot=new THREE.Matrix4().copy(mesh.matrixWorld).invert().multiply(part.matrixWorld);
@@ -150,7 +69,8 @@ model.addEventListener('model-loaded',()=>{
   for(let i=0;i<pos.count;i++){
    p.fromBufferAttribute(pos,i).applyMatrix4(toRoot);
    if(p.x>startX)p.x=startX+(p.x-startX)*1.30;
-   p.applyMatrix4(fromRoot);pos.setXYZ(i,p.x,p.y,p.z);
+   p.applyMatrix4(fromRoot);
+   pos.setXYZ(i,p.x,p.y,p.z);
   }
   pos.needsUpdate=true;
   part.geometry.computeBoundingBox();
@@ -161,41 +81,10 @@ model.addEventListener('model-loaded',()=>{
  const bounds=new THREE.Box3().setFromObject(mesh);
  const size=bounds.getSize(new THREE.Vector3());
  const scaleX=2.4/Math.max(size.x,0.0001);
- const scaleY=scaleX*2.50,scaleZ=scaleX*0.78;
- model.object3D.scale.set(scaleX,scaleY,scaleZ);
- model.object3D.position.set(-bounds.min.x*scaleX,-bounds.min.y*scaleY,-bounds.getCenter(new THREE.Vector3()).z*scaleZ);
-});
-start.addEventListener('click',()=>{
- if(!arSystem||starting)return;
- starting=true;start.disabled=true;
- tell('Kamera wird gestartet. Bitte Zugriff erlauben …');
- try{
-   const result=arSystem.start();
-   setTimeout(()=>{
-     if(starting&&!ready){
-       starting=false;start.disabled=false;
-       tell('AR-Start dauert zu lange. Bitte „Nur Kamera testen“ auswählen.');
-     }
-   },18000);
-   Promise.resolve(result).catch(e=>{
-     console.error(e);starting=false;start.disabled=false;tell(errorMessage(e));
-   });
- }catch(e){
-   console.error(e);starting=false;start.disabled=false;tell(errorMessage(e));
- }
-});
-testCamera.addEventListener('click',async()=>{
- tell('Prüfe die Kamera …');
- try{
-   if(arSystem&&ready){await arSystem.stop();ready=false;}
-   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
-   debugVideo.srcObject=stream;debugVideo.style.display='block';
-   await debugVideo.play();
-   tell('Kamera funktioniert. Die AR-Kameraebene ist noch nicht korrekt sichtbar. Bitte Screenshot schicken.');
-   start.style.display='none';
-   testCamera.textContent='Kamera läuft (nur Test)';
- }catch(e){tell(errorMessage(e));console.error(e);}
+ model.object3D.scale.set(scaleX,scaleX*2.50,scaleX*0.78);
+ model.object3D.position.set(-bounds.min.x*scaleX,-bounds.min.y*scaleX*2.50,-bounds.getCenter(new THREE.Vector3()).z*scaleX*0.78);
 });
 })();
 </script>
-</body></html>
+</body>
+</html>
