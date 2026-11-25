@@ -64,11 +64,13 @@ function errorMessage(e){
  if(k==='NotReadableError')return 'Kamera wird möglicherweise von einer anderen App benutzt.';
  return 'Kamera/AR konnte nicht gestartet werden. '+(e&&e.message||'Bitte Safari öffnen und neu laden.');
 }
-scene.addEventListener('loaded',()=>{
+function initAR(){
  arSystem=scene.systems['mindar-image-system'];
  if(arSystem){start.disabled=false;tell('Bereit. Tippe auf „Kamera starten“.');}
  else tell('AR-System ist nicht geladen. Bitte Safari aktualisieren.');
-});
+}
+if(scene.hasLoaded)initAR();
+else scene.addEventListener('loaded',initAR,{once:true});
 scene.addEventListener('arReady',()=>{
  ready=true;starting=false;start.style.display='none';
  tell(tracked?'QR erkannt – Schrift folgt dem QR-Code':'Kamera läuft. Jetzt QR-Code ins Bild halten.');
@@ -132,6 +134,12 @@ start.addEventListener('click',()=>{
  tell('Kamera wird gestartet. Bitte Zugriff erlauben …');
  try{
    const result=arSystem.start();
+   setTimeout(()=>{
+     if(starting&&!ready){
+       starting=false;start.disabled=false;
+       tell('AR-Start dauert zu lange. Bitte „Nur Kamera testen“ auswählen.');
+     }
+   },18000);
    Promise.resolve(result).catch(e=>{
      console.error(e);starting=false;start.disabled=false;tell(errorMessage(e));
    });
