@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ENNO HAAR · Raum-AR Test</title>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.4.0/model-viewer.min.js"></script>
 <style>
 :root {color-scheme:dark}
@@ -27,7 +33,7 @@ footer {padding:14px 0 24px}
 <header><small>ENNO HAAR · AR TEST V31</small><a href="./?v=31">Zur Originalversion</a></header>
 <h1>Schrift im Raum</h1>
 <p>Tippe auf „Im Raum platzieren“. Bewege das iPhone langsam und platziere die Schrift auf einer erkannten Fläche. Danach kannst du näher herangehen, zurückgehen und um die Buchstaben herumgehen.</p>
-<model-viewer id="viewer"
+<model-viewer id="viewer" src="./enno6_test.glb"
  alt="Violetter ENNO HAAR 3D-Schriftzug mit weißen 3D-Kanten"
  ar ar-modes="quick-look" ar-placement="floor" ar-scale="auto"
  orientation="0deg 7deg 0deg" camera-controls
@@ -42,12 +48,13 @@ footer {padding:14px 0 24px}
 <footer class="note">Für iPhone in Safari. Deine bisherige AR v31 wird nicht verändert.</footer>
 </main>
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
-import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
-import {GLTFExporter} from 'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/exporters/GLTFExporter.js';
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 const viewer=document.getElementById('viewer');
 const status=document.getElementById('status');
-viewer.addEventListener('load',()=>status.textContent='Bereit. Jetzt „Im Raum platzieren“ antippen.');
+let processed=false;
+viewer.addEventListener('load',()=>{status.textContent=processed?'Bereit! Jetzt „Im Raum platzieren“ antippen.':'Originalmodell sichtbar. Angepasste v31-Schrift wird geladen …';});
 viewer.addEventListener('error',(e)=>{status.textContent='Das 3D-Modell konnte nicht angezeigt werden. Bitte Safari benutzen.';console.error(e)});
 try {
  const gltf=await new GLTFLoader().loadAsync('./enno6_test.glb');
@@ -88,10 +95,12 @@ try {
  root.position.set(-ctr.x, -finalBox.min.y+0.18, -ctr.z);
  root.updateMatrixWorld(true);
  const output=await new GLTFExporter().parseAsync(root,{binary:true,onlyVisible:false,maxTextureSize:2048});
+ processed=true;
  viewer.src=URL.createObjectURL(new Blob([output],{type:'model/gltf-binary'}));
+ status.textContent='V31-Modell wird geladen …';
 } catch(e) {
  console.error('Preparing custom AR model failed',e);
- status.textContent='Lade Originalmodell als Fallback …';
+ status.textContent='Originalmodell ist verfügbar. Die angepasste Version konnte nicht vorbereitet werden.';
  viewer.src='./enno6_test.glb';
  viewer.setAttribute('scale','0.52 1.30 0.41');
 }
