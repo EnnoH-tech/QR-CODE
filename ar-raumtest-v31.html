@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ENNO HAAR · Raum-AR Test</title>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.4.0/model-viewer.min.js"></script>
+<style>
+:root {color-scheme:dark}
+* {box-sizing:border-box}
+html,body {margin:0;background:#18141e;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+main {width:min(100%,700px);margin:0 auto;min-height:100svh;display:flex;flex-direction:column;padding:16px}
+header {display:flex;align-items:center;justify-content:space-between;gap:12px}
+small {font-size:12px;opacity:.65;letter-spacing:.08em}
+a {color:#d7baff}
+h1 {font-size:clamp(24px,7vw,38px);line-height:1.05;margin:20px 0 6px}
+p {line-height:1.5;color:#d6ceda;margin:6px 0 14px;font-size:15px}
+model-viewer {width:100%;height:52svh;min-height:320px;max-height:580px;background:radial-gradient(ellipse at center,#40344d,#1b1523 70%);border:1px solid #51475a;border-radius:17px;--poster-color:transparent}
+#arButton {background:#9d25f7;color:white;border:0;border-radius:24px;box-shadow:0 4px 22px #15051d99;padding:15px 23px;font:700 16px system-ui;position:absolute;bottom:22px;left:50%;transform:translateX(-50%);white-space:nowrap;cursor:pointer}
+#arButton:focus-visible {outline:3px solid white;outline-offset:3px}
+.note {font-size:13px;color:#aca0b6}
+#status {font-size:13px;color:#ddd0ef;min-height:20px;margin:6px 0 14px}
+footer {padding:14px 0 24px}
+</style>
+</head>
+<body><main>
+<header><small>ENNO HAAR · AR TEST V31</small><a href="./?v=31">Zur Originalversion</a></header>
+<h1>Schrift im Raum</h1>
+<p>Tippe auf „Im Raum platzieren“. Bewege das iPhone langsam und platziere die Schrift auf einer erkannten Fläche. Danach kannst du näher herangehen, zurückgehen und um die Buchstaben herumgehen.</p>
+<model-viewer id="viewer"
+ alt="Violetter ENNO HAAR 3D-Schriftzug mit weißen 3D-Kanten"
+ ar ar-modes="quick-look" ar-placement="floor" ar-scale="auto"
+ orientation="0deg 7deg 0deg" camera-controls
+ touch-action="pan-y" shadow-intensity="0" exposure="1.25"
+ camera-orbit="0deg 84deg 6m" field-of-view="30deg"
+ interaction-prompt="none" loading="eager"
+ reveal="auto" ar-usdz-max-texture-size="1024">
+ <button id="arButton" slot="ar-button" type="button">Im Raum platzieren</button>
+</model-viewer>
+<div id="status">3D-Modell wird vorbereitet …</div>
+<p class="note">Im Gegensatz zur alten Kameraansicht nutzt dieser Test Apples native AR-Raumerkennung. Die Schrift bleibt nach der Platzierung an einem Ort. Dafür öffnet das iPhone eine eigene AR-Ansicht mit System-Bedienelementen.</p>
+<footer class="note">Für iPhone in Safari. Deine bisherige AR v31 wird nicht verändert.</footer>
+</main>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
+import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
+import {GLTFExporter} from 'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/exporters/GLTFExporter.js';
+const viewer=document.getElementById('viewer');
+const status=document.getElementById('status');
+viewer.addEventListener('load',()=>status.textContent='Bereit. Jetzt „Im Raum platzieren“ antippen.');
+viewer.addEventListener('error',(e)=>{status.textContent='Das 3D-Modell konnte nicht angezeigt werden. Bitte Safari benutzen.';console.error(e)});
+try {
+ const gltf=await new GLTFLoader().loadAsync('./enno6_test.glb');
+ const root=gltf.scene;
+ root.updateMatrixWorld(true);
+ // Match v31: widen only the end (A A R), never increase the letter height.
+ const bb=new THREE.Box3().setFromObject(root);
+ const rootInv=new THREE.Matrix4().copy(root.matrixWorld).invert();
+ const localBox=bb.clone().applyMatrix4(rootInv);
+ const x0=localBox.min.x+(localBox.max.x-localBox.min.x)*0.67;
+ root.traverse(part=>{
+   if(!part.isMesh || !part.geometry?.attributes?.position)return;
+   part.geometry=part.geometry.clone();
+   const pos=part.geometry.attributes.position;
+   const toRoot=new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(part.matrixWorld);
+   const fromRoot=new THREE.Matrix4().copy(part.matrixWorld).invert().multiply(root.matrixWorld);
+   const p=new THREE.Vector3();
+   for(let i=0;i<pos.count;i++){
+     p.fromBufferAttribute(pos,i).applyMatrix4(toRoot);
+     if(p.x>x0)p.x=x0+(p.x-x0)*1.30;
+     p.applyMatrix4(fromRoot);
+     pos.setXYZ(i,p.x,p.y,p.z);
+   }
+   pos.needsUpdate=true;
+   part.geometry.computeBoundingBox();
+   part.geometry.computeBoundingSphere();
+   part.geometry.computeVertexNormals();
+ });
+ // Physical AR model: approximately 3.2 metres across with the same
+ // wide lettering, pronounced height, and depth proportions as v31.
+ root.updateMatrixWorld(true);
+ const width=new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).x;
+ const sx=3.2/Math.max(width,0.001);
+ root.scale.set(sx,sx*2.5,sx*0.78);
+ root.updateMatrixWorld(true);
+ const finalBox=new THREE.Box3().setFromObject(root);
+ const ctr=finalBox.getCenter(new THREE.Vector3());
+ root.position.set(-ctr.x, -finalBox.min.y+0.18, -ctr.z);
+ root.updateMatrixWorld(true);
+ const output=await new GLTFExporter().parseAsync(root,{binary:true,onlyVisible:false,maxTextureSize:2048});
+ viewer.src=URL.createObjectURL(new Blob([output],{type:'model/gltf-binary'}));
+} catch(e) {
+ console.error('Preparing custom AR model failed',e);
+ status.textContent='Lade Originalmodell als Fallback …';
+ viewer.src='./enno6_test.glb';
+ viewer.setAttribute('scale','0.52 1.30 0.41');
+}
+</script></body></html>
